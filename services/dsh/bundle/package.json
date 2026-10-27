@@ -1,0 +1,22 @@
+{
+  "name": "@astronexus/dsh-bundle",
+  "version": "0.0.0",
+  "private": true,
+  "description": "AstroNexus 的 DSH bundle 层：薄适配与云端编排行（当前为空层）",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22",
+    "dsh": "0.2.1-rc.2"
+  },
+  "dsh": {
+    "manifestVersion": 1,
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "exports": {
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "name": "astronexus",
+  "version": "0.0.0",
+  "private": true,
+  "description": "AstroNexus DSH profile: dsh-base + dsh-headless + 本地 bundle",
+  "dsh": {
+    "manifestVersion": 1,
+    "profile": {
+      "bundles": [
+        "@deepseek-ai/dsh-base",
+        "@deepseek-ai/dsh-headless",
+        "@astronexus/dsh-bundle"
+      ]
+    }
+  }
+}

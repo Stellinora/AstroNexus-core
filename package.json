@@ -1,0 +1,20 @@
+{
+  "name": "astronexus-core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.15.0",
+  "description": "AstroNexus 云端 Docker：记忆核心 + 反思 Worker + DSH 编排",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "guard": "depcruise services packages plugins mcp ops --config .dependency-cruiser.cjs --no-progress",
+    "check": "pnpm run typecheck && pnpm run guard"
+  },
+  "devDependencies": {
+    "dependency-cruiser": "^18.7.0",
+    "typescript": "^5.7.0"
+  }
+}

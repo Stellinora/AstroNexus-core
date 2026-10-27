@@ -1,0 +1,28 @@
+name: astronexus
+
+services:
+  dsh:
+    build:
+      context: ../services/dsh
+      dockerfile: Dockerfile
+      args:
+        DSH_VERSION: 0.2.1-rc.2
+    image: astronexus/dsh:0.2.1-rc.2
+    environment:
+      DSH_HOME: /home/dsh/.dsh
+      DSH_PERMISSION_MODE: ${DSH_PERMISSION_MODE:-workspace-write}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+    volumes:
+      - dsh-home:/home/dsh/.dsh
+      - ${WORKSPACE_DIR:-./workspace}:/workspace
+    working_dir: /workspace
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
+
+  # 后续接入（docs/14 §1）：
+  # memory:   记忆核心：ingest / 归一化 / 存储 / 检索 API + MCP
+  # worker:   异步反思流水线，独立队列与限流
+
+volumes:
+  dsh-home:

@@ -1,0 +1,4 @@
+# AstroNexus bundle 层：叠加在 dsh-base / dsh-headless 之后。
+# 插入行（薄插件、MCP 挂载、权限覆盖）在此追加；替换行按 id 覆盖整个 config。
+# 空层写成 []；只有注释会让 DSH 启动失败。
+[]

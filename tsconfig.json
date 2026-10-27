@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@astronexus/protocol": ["packages/protocol/src/index.ts"],
+      "@astronexus/protocol/*": ["packages/protocol/src/*"]
+    }
+  },
+  "include": [
+    "services/**/*.ts",
+    "packages/**/*.ts",
+    "plugins/**/*.ts",
+    "mcp/**/*.ts",
+    "ops/**/*.ts"
+  ],
+  "exclude": ["**/node_modules", "**/dist"]
+}
