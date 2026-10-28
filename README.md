@@ -1,88 +1,98 @@
 # AstroNexus Core · 云端 Docker 实现
 
-> 状态：**目录骨架**。技术栈：**TypeScript + Node >= 22**（ESM / NodeNext）+ **pnpm**。
-> 架构依据 `docs/14-云端记忆与多Agent编排.md`，DSH 依赖边界见 `docs/15-DSH依赖策略.md`。
+> 状态：**结构已切换为 DSH 宿主形态**（代码待写）。
+> 技术栈：TypeScript + Node >= 22（ESM / NodeNext）+ pnpm。
+> 架构依据 `docs/14-云端记忆与多Agent编排.md`，依赖边界见 `docs/15-DSH依赖策略.md`。
 
-## 职责边界
+## 工程形态
 
-| 在 core 内（进云端镜像） | 不在 core 内 |
-|---|---|
-| 统一存储与检索 API / MCP | OpenCode / Claude Code 本地执行 |
-| 跨框架会话归一化 | 手机 App、无头 QQ 客户端 |
-| 异步反思 Worker | MCP 能力的第三方实现 |
-| DSH 组装层（profile / bundle / 薄插件） | 反射、归一化逻辑写在 DSH 插件里 |
+云端只跑一个长期进程：**DSH**。记忆、反思、编排不再是独立服务，而是同一个进程里的插件，共享 `ctx` 与一个 SQLite 连接。
 
-`plugins/` 例外：源码放在本仓库便于联调，但它是**本地侧产物，不进入云端镜像**。
+```text
+DSH 进程（profile: astronexus）
+├─ memory       插件：ingest / 归一化 / 存储 / 检索 / sync / MCP 工具
+├─ reflect      插件：异步反思流水线（租约、评分、去重、摘要、晋升、衰减）
+├─ orchestrate  插件：任务状态 / 委派 / 记忆注入 / 结果汇总
+└─ domain       纯 TS 内核：SQLite + schema + 检索 + 流水线算法（禁止 DSH 依赖）
+```
 
-原则：**跨框架差异、反思总结、同步归一化全部封在 Docker 内部，插件永远保持薄。**
+**分层规则**：`domain/` 不 import `@deepseek-ai/*`；插件入口只做注册与适配，不写业务算法。这样 DSH 预览版 API 变更时，内核不用改。
+
+## 组件与职责
+
+| 组件 | 位置 | 负责 | 不负责 |
+|---|---|---|---|
+| **memory 插件** | `src/memory/` | 会话上报、幂等、归一化调度、存储、知识/经验检索、可见性、sync、MCP 工具 | 反思、对话、委派 |
+| **reflect 插件** | `src/reflect/` | 领租约、评分、去重、矛盾检测、摘要、偏好提取、晋升、衰减 | 在线请求、改 schema |
+| **orchestrate 插件** | `src/orchestrate/` | 对话入口、检索注入、任务拆解、ACP 委派、任务状态 | 记忆整理、归一化 |
+| **domain 内核** | `src/domain/` | 存储实现、schema、FTS 检索、流水线算法 | DSH 上下文、HTTP 传输 |
+| **契约层** | `packages/protocol` | 类型、JSON Schema、错误码、版本 | 任何运行时依赖 |
+| **会话 Schema** | `packages/schema` | 框架无关事件模型 + 各框架解析器 | 存储、检索 |
+| **薄插件** | `plugins/` | Agent 侧上报 / 检索 / 收委派（本地运行） | 反思、归一化、冲突解决 |
+| **MCP 能力层** | `mcp/` | 文档搜索、Word 处理等挂载配置 | 能力实现 |
+| **运维 / 打包** | `ops/`、`docker/` | 迁移、种子、可观测性、镜像与卷 | 业务逻辑 |
+
+合并说明：原 `services/memory` 与 `services/worker` 已并入 DSH 插件；知识库与经验库共用一套存储与检索入口，sync 状态归 memory，任务状态归 orchestrate。
 
 ## 目录
 
 ```text
 core/
-├─ docker/                  # compose、entrypoint、健康检查
-├─ services/
-│  ├─ memory/               # 记忆核心：ingest、归一化、存储、检索 API / MCP
-│  ├─ worker/               # 异步反思：评分/去重/矛盾检测/摘要/晋升/衰减
-│  └─ dsh/                  # 唯一允许接触 DSH 的组装层
-│     ├─ profile/           # $DSH_HOME/profiles/astronexus
-│     ├─ bundle/            # @astronexus/dsh-bundle（层内容）
-│     ├─ plugins/           # 跑在 DSH 进程内的薄插件
-│     └─ Dockerfile
-├─ packages/
-│  ├─ protocol/             # 统一数据模型与 API 契约（docs/14 §5）
-│  └─ schema/               # 框架无关会话 schema + 各框架解析适配器
-├─ plugins/                 # Agent 侧薄适配器源码（本地运行，不进镜像）
-├─ mcp/                     # MCP 能力层挂载配置（按项目隔离）
-├─ patches/                 # 必要时的 DSH 上游 patch（需登记）
-└─ ops/                     # 迁移脚本、种子数据、可观测性配置
+├─ services/dsh/
+│  ├─ bundle/
+│  │  ├─ src/domain/        # 纯 TS 内核（禁止 @deepseek-ai）
+│  │  ├─ src/memory/        # DSH 插件入口
+│  │  ├─ src/reflect/       # DSH 插件入口
+│  │  ├─ src/orchestrate/   # DSH 插件入口
+│  │  └─ cordis.patch.yml   # 挂载三个插件
+│  ├─ profile/              # $DSH_HOME/profiles/astronexus
+│  └─ Dockerfile
+├─ packages/{protocol,schema}/
+├─ plugins/                 # 本地 Agent 薄插件（不进镜像）
+├─ mcp/ ops/ docker/
+└─ patches/
 ```
 
 ## DSH
 
 - 版本：`@deepseek-ai/dsh@0.2.1-rc.2`（exact）。
-- Profile：`base + headless + @astronexus/dsh-bundle`，可用 `web / sdk / acp` 替换或追加。
-- `@deepseek-ai/*` 只允许出现在 `services/dsh`，由 `.dependency-cruiser.cjs` 守卫生效。
-- 升级、patch、fork 门槛：见 `docs/15-DSH依赖策略.md`。
+- Profile：`base + headless + @astronexus/dsh-bundle`；对外 API 阶段换 `sdk` 或追加 `acp`。
+- 插件入口是 `services/dsh/bundle/src/{memory,reflect,orchestrate}`，其余目录禁止 `@deepseek-ai/*`。
+- 升级、patch、fork 门槛：`docs/15-DSH依赖策略.md`。
 
-## 落地顺序（docs/14 §8）
+## 落地顺序
 
-1. 统一协议与数据模型：会话、记忆、知识、经验、任务状态
-2. Docker 核心最小闭环：上报 → 归一化 → 存储 → 检索 API/MCP
-3. 接入第一个本地 Agent（OpenCode 薄插件）
-4. 反思 Worker：异步反思、知识/经验生产
-5. DSH 云端编排：对话入口、记忆注入、委派
-6. 手机 App v1 / 无头 QQ / MCP 能力层 / 对话树归档 / 多 Agent 扩展
+1. `domain`：SQLite store + FTS 检索 + 幂等 ingest（纯 TS，可单测）
+2. `memory` 插件：`ctx` 服务 + 工具 + MCP 暴露
+3. `reflect` 插件：规则版流水线，再接模型做摘要/经验提取
+4. `orchestrate` 插件：任务状态与 ACP 委派
+5. profile 切 `sdk`/`acp`，端到端联调
+6. 手机 App / 无头 QQ / MCP 能力层 / 多 Agent 扩展
 
 ## 硬约束
 
-- 反思异步执行，**不进对话热路径**。
-- 实时对话走会话服务 / SSE；记忆整理异步消费，不参与实时同步。
+- 反思异步执行，**不进对话热路径**；写入路径不做 LLM、不做 embedding。
 - 知识库（事实类、主动注入）与经验库（过程类、按需检索）分开建模。
 - 委派只面对统一 `agent_id`；ACP / SSH / HTTP 差异由适配层封装。
 - 任务状态统一为 `pending / running / done / failed`。
 - 权限按 `visibility: private | project | global` 隔离。
+- `domain/` 不依赖 DSH；插件入口不写业务算法。
 
 ## 当前状态
 
-- [x] 技术栈：TypeScript + Node >= 22 + pnpm（`package.json` / `tsconfig.json`）
-- [x] 目录骨架；`services/dsh` 的 profile / bundle / Dockerfile 已就位
-- [x] 依赖守卫 `no-dsh-outside-adapter`
+- [x] DSH 宿主形态与目录骨架
+- [x] profile / bundle / Dockerfile / compose / CI / 依赖守卫
 - [x] 本地验证：`dsh plugin add` + `--dump-config` 组合成立
-- [ ] 依赖与依赖注入方式（HTTP 框架、MCP SDK、存储驱动）
-- [ ] 存储选型：SQLite FTS5 / Postgres + pgvector
-- [ ] 是否采用 monorepo 工作区（当前为单包 + `paths` 别名）
-- [ ] 基础镜像 digest 固定
-- [ ] 首次 `docker build` 验证
+- [ ] `domain` 内核（SQLite、FTS、ingest）
+- [ ] 三个插件入口与 `cordis.patch.yml` 挂载行
+- [ ] 契约测试、迁移脚本、基础镜像 digest
+- [ ] 首次 `docker build`
 
 ## 校验
 
 ```bash
 pnpm install --frozen-lockfile
 pnpm run check                                   # typecheck + 依赖守卫
-
 docker compose -f docker/compose.yml config
-
-# DSH 组合（不启动、不调模型）
 DSH_HOME=<临时目录> dsh --profile astronexus --dump-config
 ```

@@ -1,43 +1,48 @@
-# services/dsh · DSH 组装层
+# services/dsh · DSH 宿主与插件
 
-本目录是 **唯一允许 import `@deepseek-ai/*`** 的地方（见 `docs/15-DSH依赖策略.md`）。
+云端唯一长期进程。三个插件与纯 TS 内核在同一个进程内运行。
 
 ```text
 services/dsh/
 ├─ profile/                 # 复制到 $DSH_HOME/profiles/astronexus
-│  ├─ package.json          # dsh.profile.bundles 有序列表
+│  ├─ package.json          # dsh.profile.bundles
 │  └─ cordis.patch.yml      # 用户层覆盖（空层写 []）
 ├─ bundle/                  # 安装为 @astronexus/dsh-bundle
-│  ├─ package.json          # dsh.bundle.patch → cordis.patch.yml
-│  └─ cordis.patch.yml      # 叠加在 base/headless 之后的层
-├─ plugins/                 # 跑在 DSH 进程内的薄插件源码（待实现）
+│  ├─ src/domain/           # 纯 TS 内核；禁止 @deepseek-ai
+│  ├─ src/memory/           # 插件入口：ingest / 检索 / MCP / sync
+│  ├─ src/reflect/          # 插件入口：反思流水线
+│  ├─ src/orchestrate/      # 插件入口：任务与委派
+│  └─ cordis.patch.yml      # 插入三个插件行
 └─ Dockerfile
 ```
 
+## 插件
+
+| 插件 | 入口 | ctx 注册 |
+|---|---|---|
+| memory | `@astronexus/dsh-bundle/memory` | `ctx.memory` 服务 + 模型工具 + MCP |
+| reflect | `@astronexus/dsh-bundle/reflect` | 定时/租约循环，消费 memory 的 jobs |
+| orchestrate | `@astronexus/dsh-bundle/orchestrate` | 任务状态 + ACP 委派 + 检索注入 |
+
+入口文件只做 `apply(ctx)` 注册；算法与存储都在 `src/domain/`，不 import `@deepseek-ai/*`。
+
 ## 组装顺序
 
-profile 层按以下顺序叠加，后者覆盖前者：
-
-1. `dsh.profile.bundles` 里每个 bundle 的 patch（按列表顺序）
+1. `dsh.profile.bundles` 的 bundle patch（按列表顺序）
 2. profile 自己的 `cordis.patch.yml`
-3. `$DSH_HOME/cordis.patch.yml`（机器级）
-4. `--patch <path>` 覆盖
+3. `$DSH_HOME/cordis.patch.yml`
+4. `--patch <path>`
 
 ## 命令
 
 ```bash
-# 预览组合后的配置（不启动、不调用模型）
 dsh --profile astronexus --dump-config
-
-# 把本地 bundle 装进 profile（dsh 会把 pnpm 转交给 profile 目录）
 dsh plugin --profile astronexus add ./bundle
-
-# 启动
 dsh --profile astronexus "<task>"
 ```
 
 ## 约束
 
-- 版本由根 `package.json` 与 `bundle/package.json` 的 `engines.dsh` 锁定为 `0.2.1-rc.2`。
+- 版本由 `Dockerfile` 的 `ARG DSH_VERSION` 与 `bundle/package.json` 的 `engines.dsh` 锁定为同一精确版本。
 - 升级或 patch 前先读 `docs/15-DSH依赖策略.md`。
-- 插件里不写反思、归一化、存储逻辑；那些在 `services/memory` 与 `services/worker`。
+- 插件入口不写反思、归一化、存储算法。

@@ -5,8 +5,8 @@ module.exports = {
       name: 'no-dsh-outside-adapter',
       severity: 'error',
       comment:
-        'DSH 只允许出现在 services/dsh（docs/15）。记忆核心、反思 Worker、协议、schema、薄插件与 MCP 配置必须保持运行时无关。',
-      from: { path: '^(services/(memory|worker)|packages|plugins|mcp)/' },
+        'DSH 的 import 只允许出现在 services/dsh/bundle/src/{memory,reflect,orchestrate} 插件入口（docs/15）。domain 内核、协议、schema、薄插件与 MCP 配置必须保持运行时无关。',
+      from: { path: '^(packages|plugins|mcp)/|(^|/)domain/' },
       to: { path: '@deepseek-ai' },
     },
   ],

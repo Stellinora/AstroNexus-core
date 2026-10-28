@@ -1,4 +1,13 @@
 # AstroNexus bundle 层：叠加在 dsh-base / dsh-headless 之后。
-# 插入行（薄插件、MCP 挂载、权限覆盖）在此追加；替换行按 id 覆盖整个 config。
+# 目标形态（插件入口实现后取消注释，并补 packages/ 下的子路径导出）：
+#
+# - insert:
+#     - id: astronexus-memory
+#       name: '@astronexus/dsh-bundle/memory'
+#     - id: astronexus-reflect
+#       name: '@astronexus/dsh-bundle/reflect'
+#     - id: astronexus-orchestrate
+#       name: '@astronexus/dsh-bundle/orchestrate'
+#
 # 空层写成 []；只有注释会让 DSH 启动失败。
 []
