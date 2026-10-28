@@ -1,0 +1,5 @@
+# AstroNexus Web profile 的用户层覆盖。
+# 隐私：关闭 base 默认开启的 DeepSeek 会话日志上传。
+# （OTel 由 DSH_TELEMETRY_MODE=DISABLED / DSH_TELEMETRY_DISABLED=1 关闭。）
+- id: session-log-deepseek
+  disabled: true

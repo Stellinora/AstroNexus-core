@@ -4,15 +4,19 @@
 
 ```text
 services/dsh/
-├─ profile/                 # 复制到 $DSH_HOME/profiles/astronexus
+├─ profile/                 # headless：$DSH_HOME/profiles/astronexus
 │  ├─ package.json          # dsh.profile.bundles
 │  └─ cordis.patch.yml      # 用户层覆盖（空层写 []）
+├─ profile-web/             # Web：$DSH_HOME/profiles/astronexus-web
+│  ├─ package.json          # base + web-app + bundle
+│  └─ cordis.patch.yml      # 关闭 session-log-deepseek
 ├─ bundle/                  # 安装为 @astronexus/dsh-bundle
 │  ├─ src/domain/           # 纯 TS 内核；禁止 @deepseek-ai
 │  ├─ src/memory/           # 插件入口：ingest / 检索 / MCP / sync
 │  ├─ src/reflect/          # 插件入口：反思流水线
 │  ├─ src/orchestrate/      # 插件入口：任务与委派
 │  └─ cordis.patch.yml      # 插入三个插件行
+├─ docker-entrypoint.sh     # 按 DSH_PROFILE 选择 profile 与监听参数
 └─ Dockerfile
 ```
 
@@ -37,8 +41,9 @@ services/dsh/
 
 ```bash
 dsh --profile astronexus --dump-config
-dsh plugin --profile astronexus add ./bundle
-dsh --profile astronexus "<task>"
+dsh --profile astronexus-web --dump-config
+dsh plugin --profile astronexus-web add ./bundle
+dsh --profile astronexus-web --no-open --port 3080
 ```
 
 ## 约束

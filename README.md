@@ -45,7 +45,8 @@ core/
 │  │  ├─ src/reflect/       # DSH 插件入口
 │  │  ├─ src/orchestrate/   # DSH 插件入口
 │  │  └─ cordis.patch.yml   # 挂载三个插件
-│  ├─ profile/              # $DSH_HOME/profiles/astronexus
+│  ├─ profile/              # headless：$DSH_HOME/profiles/astronexus
+│  ├─ profile-web/          # Web：$DSH_HOME/profiles/astronexus-web
 │  └─ Dockerfile
 ├─ packages/{protocol,schema}/
 ├─ plugins/                 # 本地 Agent 薄插件（不进镜像）
@@ -59,6 +60,14 @@ core/
 - Profile：`base + headless + @astronexus/dsh-bundle`；对外 API 阶段换 `sdk` 或追加 `acp`。
 - 插件入口是 `services/dsh/bundle/src/{memory,reflect,orchestrate}`，其余目录禁止 `@deepseek-ai/*`。
 - 升级、patch、fork 门槛：`docs/15-DSH依赖策略.md`。
+
+## Web
+
+- Profile：`astronexus-web` = `base + web-app + bundle`，监听 3080；`astronexus` 仍用于 headless/CLI。
+- 隐私：`profile-web/cordis.patch.yml` 关闭 `session-log-deepseek`；compose 设置
+  `DSH_TELEMETRY_MODE=DISABLED`、`DSH_TELEMETRY_DISABLED=1`。
+- 对外由 Caddy 终结 TLS（`docker/Caddyfile`）；**先单用户**，token URL 不公开分发。
+- 多用户、APK/PC 客户端、gateway 不在 core 范围，见 `docs/16-Web界面.md`。
 
 ## 落地顺序
 
@@ -82,6 +91,7 @@ core/
 
 - [x] DSH 宿主形态与目录骨架
 - [x] profile / bundle / Dockerfile / compose / CI / 依赖守卫
+- [x] `astronexus-web` profile、Caddy 示例、隐私开关
 - [x] 本地验证：`dsh plugin add` + `--dump-config` 组合成立
 - [ ] `domain` 内核（SQLite、FTS、ingest）
 - [ ] 三个插件入口与 `cordis.patch.yml` 挂载行
@@ -94,5 +104,11 @@ core/
 pnpm install --frozen-lockfile
 pnpm run check                                   # typecheck + 依赖守卫
 docker compose -f docker/compose.yml config
+
+# DSH 组合（不启动、不调模型）
 DSH_HOME=<临时目录> dsh --profile astronexus --dump-config
+DSH_HOME=<临时目录> dsh --profile astronexus-web --dump-config
+
+# 本机 Web
+DSH_HOME=<临时目录> dsh --profile astronexus-web --no-open --port 3080
 ```

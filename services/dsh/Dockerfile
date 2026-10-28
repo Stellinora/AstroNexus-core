@@ -21,8 +21,11 @@ RUN npm install -g --no-fund --no-audit \
 
 WORKDIR /opt/astronexus
 COPY profile ./profile
+COPY profile-web ./profile-web
 COPY bundle ./bundle
 COPY patches ./patches
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod 755 /usr/local/bin/docker-entrypoint.sh
 
 # 仅当 patches/ 下有 .patch 时应用；无 patch 时该步为 no-op。
 RUN set -eux; \
@@ -31,16 +34,23 @@ RUN set -eux; \
       patch -p1 -d "$(npm root -g)/@deepseek-ai/dsh" < "$p"; \
     done
 
+# 两个 profile：headless（CLI 任务/校验）与 web（云端界面）。
 RUN set -eux; \
     mkdir -p "${DSH_HOME}/profiles"; \
     cp -R /opt/astronexus/profile "${DSH_HOME}/profiles/astronexus"; \
+    cp -R /opt/astronexus/profile-web "${DSH_HOME}/profiles/astronexus-web"; \
     dsh plugin --profile astronexus add /opt/astronexus/bundle; \
-    dsh --profile astronexus --dump-config > /opt/astronexus/composed.yml; \
-    grep -q 'headless-runner' /opt/astronexus/composed.yml
+    dsh plugin --profile astronexus-web add /opt/astronexus/bundle; \
+    dsh --profile astronexus --dump-config > /opt/astronexus/composed-headless.yml; \
+    dsh --profile astronexus-web --dump-config > /opt/astronexus/composed-web.yml; \
+    grep -q 'headless-runner' /opt/astronexus/composed-headless.yml; \
+    grep -q 'webserver' /opt/astronexus/composed-web.yml; \
+    awk '/id: session-log-deepseek/{f=1} f&&/disabled: true/{found=1;exit} END{exit !found}' /opt/astronexus/composed-web.yml
 
 RUN useradd --create-home --uid 10001 dsh \
  && chown -R dsh:dsh /opt/astronexus "${DSH_HOME}"
 
 USER dsh
 WORKDIR /workspace
-ENTRYPOINT ["dsh", "--profile", "astronexus"]
+EXPOSE 3080
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
