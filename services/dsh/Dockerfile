@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
-# 基础镜像 digest 待首次可复现构建后固定（docs/15 §4）。
-FROM node:24-bookworm-slim
+# 基础镜像按 digest 固定（linux/amd64，node:24-bookworm-slim）。
+FROM node:24-bookworm-slim@sha256:c86ecead9e55a5210ac1727de38a4ca840bf03dcaf34dc9749addbf383b1920c
 
 ARG DSH_VERSION=0.2.1-rc.2
 
