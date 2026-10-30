@@ -10,6 +10,12 @@ window.__ModuleLoader__.load({
   --dsw-alias-brand-text: #4d6bfe !important;
   --dsw-alias-link: #4d6bfe !important;
 
+  --dsw-specific-sidebar-fill: #f7f8fa !important;
+  --dsw-specific-input-major: #ffffff !important;
+  --dsw-alias-button-info-fill: #4d6bfe !important;
+  --dsw-alias-button-info-hover: #3f5cf0 !important;
+  --dsw-alias-state-business-primary: #4d6bfe !important;
+
   --dsw-alias-bg-base: #ffffff !important;
   --dsw-alias-bg-layer-1: #ffffff !important;
   --dsw-alias-bg-layer-2: #f3f4f6 !important;
@@ -38,6 +44,12 @@ body[data-ds-dark-theme] {
   --dsw-alias-brand-primary: #6b83ff !important;
   --dsw-alias-button-primary-fill: #5b78ff !important;
   --dsw-alias-button-primary-hover: #4f6ef5 !important;
+
+  --dsw-specific-sidebar-fill: #1a1a1d !important;
+  --dsw-specific-input-major: #242428 !important;
+  --dsw-alias-button-info-fill: #5b78ff !important;
+  --dsw-alias-button-info-hover: #4f6ef5 !important;
+  --dsw-alias-state-business-primary: #6b83ff !important;
 
   --dsw-alias-bg-base: #141416 !important;
   --dsw-alias-bg-layer-1: #1a1a1d !important;
