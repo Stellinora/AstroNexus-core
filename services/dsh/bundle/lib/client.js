@@ -12,48 +12,52 @@ window.__ModuleLoader__.load({
 
   --dsw-alias-bg-base: #ffffff !important;
   --dsw-alias-bg-layer-1: #ffffff !important;
-  --dsw-alias-bg-layer-2: #f7f8fa !important;
-  --dsw-alias-bg-layer-3: #f2f3f5 !important;
-  --dsw-alias-bg-module-platform: #f5f6f8 !important;
+  --dsw-alias-bg-layer-2: #f3f4f6 !important;
+  --dsw-alias-bg-layer-3: #edeff2 !important;
+  --dsw-alias-bg-module-platform: #f1f3f6 !important;
   --dsw-alias-bg-overlay: #ffffff !important;
 
   --dsw-alias-label-primary: #1b1b1f !important;
-  --dsw-alias-label-secondary: #5c5f66 !important;
-  --dsw-alias-label-tertiary: #8b8f96 !important;
-  --dsw-alias-label-caption: #a2a6ad !important;
+  --dsw-alias-label-secondary: #4f535a !important;
+  --dsw-alias-label-tertiary: #6b7078 !important;
+  --dsw-alias-label-caption: #858a92 !important;
 
-  --dsw-alias-border-l1: #eceef1 !important;
-  --dsw-alias-border-l2: #e6e8eb !important;
-  --dsw-alias-border-l3: #dfe2e6 !important;
-  --dsw-alias-border-l4: #d6dae0 !important;
+  --dsw-alias-border-l1: #e9ebef !important;
+  --dsw-alias-border-l2: #dfe3e8 !important;
+  --dsw-alias-border-l3: #d5dae1 !important;
+  --dsw-alias-border-l4: #c9cfd7 !important;
 
-  --dsw-alias-interactive-bg-hover: #f2f4f7 !important;
-  --dsw-alias-interactive-bg-active: #e9edf3 !important;
+  --dsw-alias-interactive-bg-hover: #eef1f5 !important;
+  --dsw-alias-interactive-bg-active: #e5eaf0 !important;
 
   --dsw-alias-button-primary-fill: #4d6bfe !important;
   --dsw-alias-button-primary-hover: #3f5cf0 !important;
 }
 
 body[data-ds-dark-theme] {
-  --dsw-alias-bg-base: #1b1b1d !important;
-  --dsw-alias-bg-layer-1: #212124 !important;
-  --dsw-alias-bg-layer-2: #26262a !important;
-  --dsw-alias-bg-layer-3: #2c2c31 !important;
-  --dsw-alias-bg-module-platform: #232326 !important;
-  --dsw-alias-bg-overlay: #2a2a2e !important;
+  --dsw-alias-brand-primary: #6b83ff !important;
+  --dsw-alias-button-primary-fill: #5b78ff !important;
+  --dsw-alias-button-primary-hover: #4f6ef5 !important;
+
+  --dsw-alias-bg-base: #141416 !important;
+  --dsw-alias-bg-layer-1: #1a1a1d !important;
+  --dsw-alias-bg-layer-2: #202024 !important;
+  --dsw-alias-bg-layer-3: #26262b !important;
+  --dsw-alias-bg-module-platform: #1e1e22 !important;
+  --dsw-alias-bg-overlay: #242428 !important;
 
   --dsw-alias-label-primary: #ededf0 !important;
-  --dsw-alias-label-secondary: #a8abb2 !important;
-  --dsw-alias-label-tertiary: #85888f !important;
-  --dsw-alias-label-caption: #6f7278 !important;
+  --dsw-alias-label-secondary: #b4b8bf !important;
+  --dsw-alias-label-tertiary: #9498a0 !important;
+  --dsw-alias-label-caption: #7f838b !important;
 
-  --dsw-alias-border-l1: #2f2f34 !important;
-  --dsw-alias-border-l2: #35353b !important;
-  --dsw-alias-border-l3: #3d3d44 !important;
-  --dsw-alias-border-l4: #46464e !important;
+  --dsw-alias-border-l1: #2a2a2f !important;
+  --dsw-alias-border-l2: #33333a !important;
+  --dsw-alias-border-l3: #3c3c45 !important;
+  --dsw-alias-border-l4: #464650 !important;
 
-  --dsw-alias-interactive-bg-hover: #2e2e34 !important;
-  --dsw-alias-interactive-bg-active: #3a3a42 !important;
+  --dsw-alias-interactive-bg-hover: #2a2a30 !important;
+  --dsw-alias-interactive-bg-active: #34343c !important;
 }
 `;
 
