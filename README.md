@@ -98,8 +98,8 @@ core/
 - [ ] 三个插件入口与 `cordis.patch.yml` 挂载行
 - [x] 基础镜像 digest 固定（`node:24-bookworm-slim@sha256:c86ecead…`）
 - [x] 首次 `docker build` 与容器 3080 验证（WSL + Docker Desktop）
-- [x] 主题骨架：token 覆盖（`bundle/lib/client.js`）
-- [ ] 主题按截图调色、组件级覆盖（Phase 1 续）
+- [x] 主题调色（两轮视觉审查：对比度 / 暗色分层 / 侧栏与输入框）
+- [ ] 组件级覆盖（HARNESS 徽章、空状态引导）
 
 ## 校验
 
