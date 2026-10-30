@@ -1,0 +1,26 @@
+{
+  "name": "@astronexus/dsh-client-theme",
+  "version": "0.0.0",
+  "private": true,
+  "description": "AstroNexus 视觉主题：覆盖 DSH 的 --dsw-* token（DeepSeek 官方风格）",
+  "type": "module",
+  "license": "MIT",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/client.js"
+  ],
+  "engines": {
+    "dsh": "0.2.1-rc.2"
+  },
+  "dsh": {
+    "client": {
+      "platform": "web"
+    }
+  }
+}

@@ -9,6 +9,9 @@
     "node": ">=22",
     "dsh": "0.2.1-rc.2"
   },
+  "dependencies": {
+    "@astronexus/dsh-client-theme": "file:../client-theme"
+  },
   "dsh": {
     "manifestVersion": 1,
     "bundle": {

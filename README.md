@@ -44,7 +44,8 @@ core/
 │  │  ├─ src/memory/        # DSH 插件入口
 │  │  ├─ src/reflect/       # DSH 插件入口
 │  │  ├─ src/orchestrate/   # DSH 插件入口
-│  │  └─ cordis.patch.yml   # 挂载三个插件
+│  │  └─ cordis.patch.yml   # 挂载插件与主题
+│  ├─ client-theme/         # 浏览器主题插件（只覆盖 --dsw-* token）
 │  ├─ profile/              # headless：$DSH_HOME/profiles/astronexus
 │  ├─ profile-web/          # Web：$DSH_HOME/profiles/astronexus-web
 │  └─ Dockerfile
@@ -95,9 +96,10 @@ core/
 - [x] 本地验证：`dsh plugin add` + `--dump-config` 组合成立
 - [ ] `domain` 内核（SQLite、FTS、ingest）
 - [ ] 三个插件入口与 `cordis.patch.yml` 挂载行
-- [ ] 契约测试、迁移脚本
 - [x] 基础镜像 digest 固定（`node:24-bookworm-slim@sha256:c86ecead…`）
 - [x] 首次 `docker build` 与容器 3080 验证（WSL + Docker Desktop）
+- [x] 主题插件骨架：token 覆盖（`client-theme`）
+- [ ] 主题按截图调色、组件级覆盖（Phase 1 续）
 
 ## 校验
 
