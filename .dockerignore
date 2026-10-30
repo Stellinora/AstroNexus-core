@@ -1,0 +1,10 @@
+.git
+.gitignore
+.github
+node_modules
+**/node_modules
+.pnpm-store
+**/.pnpm-store
+docker/workspace
+docs
+*.log

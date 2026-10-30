@@ -3,8 +3,8 @@ name: astronexus
 services:
   dsh:
     build:
-      context: ../services/dsh
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: services/dsh/Dockerfile
       args:
         DSH_VERSION: 0.2.1-rc.2
     image: astronexus/dsh:0.2.1-rc.2

@@ -20,11 +20,11 @@ RUN npm install -g --no-fund --no-audit \
  && npm cache clean --force
 
 WORKDIR /opt/astronexus
-COPY profile ./profile
-COPY profile-web ./profile-web
-COPY bundle ./bundle
+COPY services/dsh/profile ./profile
+COPY services/dsh/profile-web ./profile-web
+COPY services/dsh/bundle ./bundle
 COPY patches ./patches
-COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+COPY services/dsh/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod 755 /usr/local/bin/docker-entrypoint.sh
 
 # 仅当 patches/ 下有 .patch 时应用；无 patch 时该步为 no-op。
