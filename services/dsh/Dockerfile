@@ -23,7 +23,6 @@ WORKDIR /opt/astronexus
 COPY services/dsh/profile ./profile
 COPY services/dsh/profile-web ./profile-web
 COPY services/dsh/bundle ./bundle
-COPY services/dsh/client-theme ./client-theme
 COPY patches ./patches
 COPY services/dsh/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod 755 /usr/local/bin/docker-entrypoint.sh

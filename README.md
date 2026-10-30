@@ -44,8 +44,8 @@ core/
 │  │  ├─ src/memory/        # DSH 插件入口
 │  │  ├─ src/reflect/       # DSH 插件入口
 │  │  ├─ src/orchestrate/   # DSH 插件入口
+│  │  ├─ lib/client.js       # 浏览器主题（只覆盖 --dsw-* token）
 │  │  └─ cordis.patch.yml   # 挂载插件与主题
-│  ├─ client-theme/         # 浏览器主题插件（只覆盖 --dsw-* token）
 │  ├─ profile/              # headless：$DSH_HOME/profiles/astronexus
 │  ├─ profile-web/          # Web：$DSH_HOME/profiles/astronexus-web
 │  └─ Dockerfile
@@ -98,7 +98,7 @@ core/
 - [ ] 三个插件入口与 `cordis.patch.yml` 挂载行
 - [x] 基础镜像 digest 固定（`node:24-bookworm-slim@sha256:c86ecead…`）
 - [x] 首次 `docker build` 与容器 3080 验证（WSL + Docker Desktop）
-- [x] 主题插件骨架：token 覆盖（`client-theme`）
+- [x] 主题骨架：token 覆盖（`bundle/lib/client.js`）
 - [ ] 主题按截图调色、组件级覆盖（Phase 1 续）
 
 ## 校验

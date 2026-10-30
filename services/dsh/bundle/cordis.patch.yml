@@ -1,7 +1,8 @@
 # AstroNexus bundle 层：叠加在 dsh-base / dsh-headless 之后。
+# 本包同时是浏览器 client 插件（dsh.client），lib/client.js 覆盖 --dsw-* token。
 
 - insert:
     - id: astronexus-theme
-      name: '@astronexus/dsh-client-theme'
+      name: '@astronexus/dsh-bundle'
 
 # 后续插件行（memory / reflect / orchestrate）在入口实现后追加。

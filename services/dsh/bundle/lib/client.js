@@ -1,5 +1,5 @@
 window.__ModuleLoader__.load({
-	id: "@astronexus/dsh-client-theme",
+	id: "@astronexus/dsh-bundle",
 	factory: (require) => {
 		const module = { exports: {} };
 		const exports = module.exports;
