@@ -59,7 +59,7 @@ body[data-ds-dark-theme] {
 
 		function apply(ctx) {
 			const tag = document.createElement("style");
-			tag.dataset.plugin = "@astronexus/dsh-client-theme";
+			tag.dataset.plugin = "@astronexus/dsh-bundle";
 			tag.textContent = css;
 			document.head.appendChild(tag);
 			if (ctx && typeof ctx.effect === "function") {
