@@ -106,6 +106,10 @@ body[data-ds-dark-theme] {
 			});
 		}
 
+		function applyTitle() {
+			if (document.title !== "AstroNexus") document.title = "AstroNexus";
+		}
+
 		function hidePreviewBadge() {
 			const hero = document.querySelector('[class*="hero"]');
 			if (!hero) return;
@@ -131,11 +135,20 @@ body[data-ds-dark-theme] {
 				}));
 			}
 			if (typeof MutationObserver === "function") {
-				const observer = new MutationObserver(() => hidePreviewBadge());
+				const observer = new MutationObserver(() => {
+					hidePreviewBadge();
+					applyTitle();
+				});
 				observer.observe(document.body, { childList: true, subtree: true });
 				hidePreviewBadge();
+				applyTitle();
+				const titleObserver = new MutationObserver(() => applyTitle());
+				titleObserver.observe(document.head, { childList: true, subtree: true, characterData: true });
 				if (ctx && typeof ctx.effect === "function") {
-					ctx.effect(() => () => observer.disconnect());
+					ctx.effect(() => () => {
+						observer.disconnect();
+						titleObserver.disconnect();
+					});
 				}
 			}
 		}
