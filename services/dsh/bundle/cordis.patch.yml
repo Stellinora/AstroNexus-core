@@ -4,6 +4,46 @@
 - id: ui-brand-official
   disabled: true
 
+# 系统提示自述（preset 内的 persona 见下方 preset 补丁）
+- id: system-prompt
+  config:
+    personaPrefix: >-
+      You are AstroNexus, a cloud memory and multi-agent orchestration assistant.
+      You are powered by the {{model}} model.
+
+# preset 内 persona 覆盖（DSH 的 preset patch 语法）
+- id: preset-standard
+  preset:
+    - id: persona
+      config:
+        prefix: >-
+          You are AstroNexus, a cloud memory and multi-agent orchestration assistant.
+          You are powered by the {{model}} model.
+
+- id: preset-ptc
+  preset:
+    - id: persona
+      config:
+        prefix: >-
+          You are AstroNexus, a cloud memory and multi-agent orchestration assistant.
+          You are powered by the {{model}} model.
+
+- id: preset-cordis
+  preset:
+    - id: persona
+      config:
+        prefix: >-
+          You are AstroNexus, a cloud memory and multi-agent orchestration assistant.
+          You are powered by the {{model}} model.
+
+- id: preset-minimal
+  preset:
+    - id: persona
+      config:
+        prefix: You are AstroNexus, a helpful cloud memory assistant.
+        complete: true
+        includeRuntimeContext: false
+
 - insert:
     - id: astronexus-theme
       name: '@astronexus/dsh-bundle'

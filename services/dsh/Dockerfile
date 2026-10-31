@@ -22,6 +22,7 @@ WORKDIR /opt/astronexus
 COPY services/dsh/profile ./profile
 COPY services/dsh/profile-web ./profile-web
 COPY services/dsh/bundle ./bundle
+COPY services/dsh/brand ./brand
 COPY patches ./patches
 COPY services/dsh/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod 755 /usr/local/bin/docker-entrypoint.sh
@@ -34,6 +35,15 @@ RUN set -eux; \
     done
 
 # 两个 profile：headless（CLI 任务/校验）与 web（云端界面）。
+# 品牌静态资源：覆盖内置前端 dist（路径按 0.2.1-rc.2 固定，升级时复核）。
+RUN set -eux; \
+    dist="$(npm root -g)/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-web-frontend/dist"; \
+    cp /opt/astronexus/brand/favicon.svg "$dist/favicon.svg"; \
+    cp /opt/astronexus/brand/favicon-dark.svg "$dist/favicon-dark.svg"; \
+    cp /opt/astronexus/brand/manifest.webmanifest "$dist/manifest.webmanifest"; \
+    sed -i 's#<title>DeepSeek Harness</title>#<title>AstroNexus</title>#' "$dist/index.html"; \
+    grep -q '<title>AstroNexus</title>' "$dist/index.html"
+
 RUN set -eux; \
     mkdir -p "${DSH_HOME}/profiles"; \
     cp -R /opt/astronexus/profile "${DSH_HOME}/profiles/astronexus"; \

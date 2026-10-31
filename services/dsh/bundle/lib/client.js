@@ -106,6 +106,16 @@ body[data-ds-dark-theme] {
 			});
 		}
 
+		function hidePreviewBadge() {
+			const hero = document.querySelector('[class*="hero"]');
+			if (!hero) return;
+			for (const el of hero.querySelectorAll("span,div")) {
+				if (el.children.length === 0 && (el.textContent === "预览版" || el.textContent === "Preview")) {
+					el.style.display = "none";
+				}
+			}
+		}
+
 		function apply(ctx) {
 			const tag = document.createElement("style");
 			tag.dataset.plugin = "@astronexus/dsh-bundle";
@@ -119,6 +129,14 @@ body[data-ds-dark-theme] {
 					yield ctx.slots.register({ name: "sidebar.brand.mark" }, BrandMark);
 					yield ctx.slots.register({ name: "sidebar.brand.name" }, BrandName);
 				}));
+			}
+			if (typeof MutationObserver === "function") {
+				const observer = new MutationObserver(() => hidePreviewBadge());
+				observer.observe(document.body, { childList: true, subtree: true });
+				hidePreviewBadge();
+				if (ctx && typeof ctx.effect === "function") {
+					ctx.effect(() => () => observer.disconnect());
+				}
 			}
 		}
 
