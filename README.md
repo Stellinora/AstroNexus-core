@@ -99,7 +99,9 @@ core/
 - [x] 基础镜像 digest 固定（`node:24-bookworm-slim@sha256:c86ecead…`）
 - [x] 首次 `docker build` 与容器 3080 验证（WSL + Docker Desktop）
 - [x] 主题调色（两轮视觉审查：对比度 / 暗色分层 / 侧栏与输入框）
-- [ ] 组件级覆盖（HARNESS 徽章、空状态引导）
+- [x] 侧栏品牌槽位：AstroNexus 文字 + 轨道标记（禁用 `ui-brand-official`）
+- [ ] favicon / 页面标题 / manifest 覆盖（见 `docs/17-品牌与标识符.md`）
+- [ ] hero 欢迎区 / “预览版”徽章
 
 ## 校验
 

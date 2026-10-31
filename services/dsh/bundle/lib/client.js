@@ -107,13 +107,6 @@ body[data-ds-dark-theme] {
 		}
 
 		function apply(ctx) {
-			if (typeof window !== "undefined") {
-				window.__astroBrand = {
-					hasSlots: !!(ctx && ctx.slots),
-					injectType: typeof (ctx && ctx.slots && ctx.slots.inject),
-					registerType: typeof (ctx && ctx.slots && ctx.slots.register),
-				};
-			}
 			const tag = document.createElement("style");
 			tag.dataset.plugin = "@astronexus/dsh-bundle";
 			tag.textContent = css;
@@ -122,14 +115,10 @@ body[data-ds-dark-theme] {
 				ctx.effect(() => () => tag.remove());
 			}
 			if (ctx && ctx.slots) {
-				ctx.slots.inject("sidebar.brand.mark", () => {
-					if (typeof window !== "undefined") window.__astroBrandInject = true;
-					return ctx.slots.inject("sidebar.brand.name", function* () {
-						if (typeof window !== "undefined") window.__astroBrandGen = true;
-						yield ctx.slots.register({ name: "sidebar.brand.mark" }, BrandMark);
-						yield ctx.slots.register({ name: "sidebar.brand.name" }, BrandName);
-					});
-				});
+				ctx.slots.inject("sidebar.brand.mark", () => ctx.slots.inject("sidebar.brand.name", function* () {
+					yield ctx.slots.register({ name: "sidebar.brand.mark" }, BrandMark);
+					yield ctx.slots.register({ name: "sidebar.brand.name" }, BrandName);
+				}));
 			}
 		}
 
