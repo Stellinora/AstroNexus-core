@@ -82,26 +82,28 @@ body[data-ds-dark-theme] {
 				fill: "none",
 				"aria-hidden": true,
 				style: { color: "var(--dsw-alias-brand-primary)" },
-			},
-				jsx("circle", { key: "core", cx: 12, cy: 12, r: 3.1, fill: "currentColor" }),
-				jsx("ellipse", {
-					key: "orbit",
-					cx: 12,
-					cy: 12,
-					rx: 10,
-					ry: 4.4,
-					stroke: "currentColor",
-					strokeWidth: 1.6,
-					transform: "rotate(-28 12 12)",
-				}),
-				jsx("circle", { key: "moon", cx: 20.1, cy: 7.3, r: 1.5, fill: "currentColor" }),
-			);
+				children: [
+					jsx("circle", { key: "core", cx: 12, cy: 12, r: 3.1, fill: "currentColor" }),
+					jsx("ellipse", {
+						key: "orbit",
+						cx: 12,
+						cy: 12,
+						rx: 10,
+						ry: 4.4,
+						stroke: "currentColor",
+						strokeWidth: 1.6,
+						transform: "rotate(-28 12 12)",
+					}),
+					jsx("circle", { key: "moon", cx: 20.1, cy: 7.3, r: 1.5, fill: "currentColor" }),
+				],
+			});
 		}
 
 		function BrandName() {
 			return jsx("span", {
 				style: { fontWeight: 600, letterSpacing: "0.01em", whiteSpace: "nowrap" },
-			}, "AstroNexus");
+				children: "AstroNexus",
+			});
 		}
 
 		function apply(ctx) {
