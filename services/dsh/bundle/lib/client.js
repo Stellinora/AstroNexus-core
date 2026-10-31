@@ -3,6 +3,7 @@ window.__ModuleLoader__.load({
 	factory: (require) => {
 		const module = { exports: {} };
 		const exports = module.exports;
+		const { jsx } = require("react/jsx-runtime");
 
 		const css = `
 :root, body {
@@ -73,6 +74,36 @@ body[data-ds-dark-theme] {
 }
 `;
 
+		function BrandMark() {
+			return jsx("svg", {
+				width: 22,
+				height: 22,
+				viewBox: "0 0 24 24",
+				fill: "none",
+				"aria-hidden": true,
+				style: { color: "var(--dsw-alias-brand-primary)" },
+			},
+				jsx("circle", { key: "core", cx: 12, cy: 12, r: 3.1, fill: "currentColor" }),
+				jsx("ellipse", {
+					key: "orbit",
+					cx: 12,
+					cy: 12,
+					rx: 10,
+					ry: 4.4,
+					stroke: "currentColor",
+					strokeWidth: 1.6,
+					transform: "rotate(-28 12 12)",
+				}),
+				jsx("circle", { key: "moon", cx: 20.1, cy: 7.3, r: 1.5, fill: "currentColor" }),
+			);
+		}
+
+		function BrandName() {
+			return jsx("span", {
+				style: { fontWeight: 600, letterSpacing: "0.01em", whiteSpace: "nowrap" },
+			}, "AstroNexus");
+		}
+
 		function apply(ctx) {
 			const tag = document.createElement("style");
 			tag.dataset.plugin = "@astronexus/dsh-bundle";
@@ -81,9 +112,14 @@ body[data-ds-dark-theme] {
 			if (ctx && typeof ctx.effect === "function") {
 				ctx.effect(() => () => tag.remove());
 			}
+			if (ctx && ctx.slots) {
+				ctx.slots.inject("sidebar.brand.mark", () => ctx.slots.register({ name: "sidebar.brand.mark" }, BrandMark));
+				ctx.slots.inject("sidebar.brand.name", () => ctx.slots.register({ name: "sidebar.brand.name" }, BrandName));
+			}
 		}
 
 		exports.apply = apply;
+		exports.inject = ["slots"];
 		exports.name = "astronexus-theme";
 		return module.exports;
 	},
