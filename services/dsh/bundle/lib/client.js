@@ -113,8 +113,10 @@ body[data-ds-dark-theme] {
 				ctx.effect(() => () => tag.remove());
 			}
 			if (ctx && ctx.slots) {
-				ctx.slots.inject("sidebar.brand.mark", () => ctx.slots.register({ name: "sidebar.brand.mark" }, BrandMark));
-				ctx.slots.inject("sidebar.brand.name", () => ctx.slots.register({ name: "sidebar.brand.name" }, BrandName));
+				ctx.slots.inject("sidebar.brand.mark", () => ctx.slots.inject("sidebar.brand.name", function* () {
+					yield ctx.slots.register({ name: "sidebar.brand.mark" }, BrandMark);
+					yield ctx.slots.register({ name: "sidebar.brand.name" }, BrandName);
+				}));
 			}
 		}
 
