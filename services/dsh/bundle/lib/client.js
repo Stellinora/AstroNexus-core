@@ -120,10 +120,14 @@ body[data-ds-dark-theme] {
 				ctx.effect(() => () => tag.remove());
 			}
 			if (ctx && ctx.slots) {
-				ctx.slots.inject("sidebar.brand.mark", () => ctx.slots.inject("sidebar.brand.name", function* () {
-					yield ctx.slots.register({ name: "sidebar.brand.mark" }, BrandMark);
-					yield ctx.slots.register({ name: "sidebar.brand.name" }, BrandName);
-				}));
+				ctx.slots.inject("sidebar.brand.mark", () => {
+					if (typeof window !== "undefined") window.__astroBrandInject = true;
+					return ctx.slots.inject("sidebar.brand.name", function* () {
+						if (typeof window !== "undefined") window.__astroBrandGen = true;
+						yield ctx.slots.register({ name: "sidebar.brand.mark" }, BrandMark);
+						yield ctx.slots.register({ name: "sidebar.brand.name" }, BrandName);
+					});
+				});
 			}
 		}
 
