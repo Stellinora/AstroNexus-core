@@ -105,6 +105,13 @@ body[data-ds-dark-theme] {
 		}
 
 		function apply(ctx) {
+			if (typeof window !== "undefined") {
+				window.__astroBrand = {
+					hasSlots: !!(ctx && ctx.slots),
+					injectType: typeof (ctx && ctx.slots && ctx.slots.inject),
+					registerType: typeof (ctx && ctx.slots && ctx.slots.register),
+				};
+			}
 			const tag = document.createElement("style");
 			tag.dataset.plugin = "@astronexus/dsh-bundle";
 			tag.textContent = css;
