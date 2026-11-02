@@ -11,6 +11,7 @@ import type {
   CorrectResult,
   IngestInput,
   IngestResult,
+  ListQuery,
   MemoryEvent,
   MemoryKind,
   MemoryLifecycle,
@@ -165,6 +166,27 @@ export class SqliteMemoryStore implements MemoryStore {
       )
       .all() as unknown as EventRow[];
     return buildBootSnapshot(rows.map(toEvent), request);
+  }
+
+  async list(query: ListQuery = {}): Promise<readonly MemoryEvent[]> {
+    const lifecycles = query.lifecycles ?? ["active"];
+    const limit = query.limit ?? 50;
+    const placeholders = lifecycles.map(() => "?").join(", ");
+    const conditions = [`e.lifecycle IN (${placeholders})`, headClause("e")];
+    const params: (string | number)[] = [...lifecycles];
+    if (query.kind) {
+      conditions.push("e.kind = ?");
+      params.push(query.kind);
+    }
+    const rows = this.#db
+      .prepare(
+        `SELECT e.* FROM memory_event e
+         WHERE ${conditions.join(" AND ")}
+         ORDER BY e.event_time DESC
+         LIMIT ?`,
+      )
+      .all(...params, limit) as unknown as EventRow[];
+    return rows.map(toEvent);
   }
 
   async maintenance(options: MaintenanceOptions = {}): Promise<MaintenanceResult> {

@@ -161,6 +161,31 @@ for (const storeCase of cases()) {
     }
   });
 
+  test(`${storeCase.name}: list returns active heads and filters`, async () => {
+    const store = await storeCase.create();
+    try {
+      const fact = await store.ingest({
+        kind: "fact",
+        payload: { text: "fact one" },
+        searchText: "fact one",
+      });
+      await store.ingest({
+        kind: "preference",
+        payload: { text: "pref one" },
+        searchText: "pref one",
+      });
+
+      assert.equal((await store.list()).length, 2);
+      assert.equal((await store.list({ kind: "fact" })).length, 1);
+
+      await store.transition(fact.event.memoryId, "archived");
+      assert.equal((await store.list()).length, 1);
+      assert.equal((await store.list({ lifecycles: ["archived"] })).length, 1);
+    } finally {
+      await store.close();
+    }
+  });
+
   test(`${storeCase.name}: maintenance archives duplicate active heads`, async () => {
     const store = await storeCase.create();
     try {

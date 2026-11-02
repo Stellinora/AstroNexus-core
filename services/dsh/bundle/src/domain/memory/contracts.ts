@@ -63,6 +63,12 @@ export interface RetrievalHit {
   readonly score: number;
 }
 
+export interface ListQuery {
+  readonly kind?: MemoryKind;
+  readonly lifecycles?: readonly MemoryLifecycle[];
+  readonly limit?: number;
+}
+
 export interface BootRequest {
   readonly tokenBudget?: number;
   readonly maxItems?: number;
@@ -87,6 +93,7 @@ export interface MemoryStore {
   correct(input: CorrectInput): Promise<CorrectResult>;
   transition(memoryId: string, to: MemoryLifecycle): Promise<MemoryEvent>;
   retrieve(query: RetrieveQuery): Promise<readonly RetrievalHit[]>;
+  list(query?: ListQuery): Promise<readonly MemoryEvent[]>;
   maintenance(options?: MaintenanceOptions): Promise<MaintenanceResult>;
   boot(request?: BootRequest): BootSnapshot;
   exportJsonl(): AsyncIterable<string>;

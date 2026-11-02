@@ -14,6 +14,7 @@ export function apply(ctx, config = {}) {
   const dbPath = config.dbPath || join(home, "memory", "memory.db");
   const tokenBudget = config.bootTokenBudget ?? 800;
   const maxMessageChars = config.maxMessageChars ?? 4000;
+  const minMessageChars = config.minMessageChars ?? 8;
 
   const store = new SqliteMemoryStore(dbPath);
   let snapshot = store.boot({ tokenBudget });
@@ -34,8 +35,12 @@ export function apply(ctx, config = {}) {
     ctx.on("session/event", (session, event) => {
       try {
         if (event.type !== "user/message" && event.type !== "assistant/message") return;
-        const text = extractText(event.data && event.data.message).slice(0, maxMessageChars);
-        if (text === "") return;
+        const text = extractText(event.data && event.data.message)
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, maxMessageChars);
+        if (text.length < minMessageChars) return;
+        if (text.startsWith("/")) return;
         const kind = event.type === "user/message" ? "fact" : "reflection";
         store
           .ingest({
@@ -58,6 +63,9 @@ export function apply(ctx, config = {}) {
   ctx.effect(() => ctx.tools.register(memorySearchTool(store)));
   ctx.effect(() => ctx.tools.register(memoryRememberTool(store, refresh)));
   ctx.effect(() => ctx.tools.register(memoryCorrectTool(store, refresh)));
+  ctx.effect(() => ctx.tools.register(memoryListTool(store)));
+  ctx.effect(() => ctx.tools.register(memoryForgetTool(store, refresh)));
+  ctx.effect(() => ctx.tools.register(memoryExportTool(store)));
 
   ctx.effect(() => () => {
     store.close().catch(() => {});
@@ -206,6 +214,139 @@ function memoryCorrectTool(store, refresh) {
         eventId: result.event.eventId,
         previousEventId: result.previousEventId ?? 0,
       };
+    },
+  };
+}
+
+function memoryListTool(store) {
+  return {
+    name: "memory_list",
+    description: "List current memory entries, newest first.",
+    parameters: {
+      type: "object",
+      properties: {
+        kind: { type: "string", enum: KINDS },
+        includeInactive: { type: "boolean", description: "Include decayed, archived, and soft-deleted entries." },
+        limit: { type: "number", description: "Maximum entries, default 50." },
+      },
+      additionalProperties: false,
+    },
+    output: {
+      schema: {
+        type: "object",
+        properties: {
+          items: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                memoryId: { type: "string" },
+                kind: { type: "string" },
+                text: { type: "string" },
+                lifecycle: { type: "string" },
+                sourceRef: { type: "string" },
+                eventTime: { type: "number" },
+              },
+              required: ["memoryId", "kind", "text", "lifecycle", "sourceRef", "eventTime"],
+              additionalProperties: false,
+            },
+          },
+        },
+        required: ["items"],
+        additionalProperties: false,
+      },
+      render: (_args, value) => renderText(value),
+    },
+    execute: async (args) => {
+      const events = await store.list({
+        ...(args.kind ? { kind: args.kind } : {}),
+        ...(args.includeInactive
+          ? { lifecycles: ["active", "decayed", "archived", "soft_deleted"] }
+          : {}),
+        ...(args.limit ? { limit: Number(args.limit) } : {}),
+      });
+      return {
+        items: events.map((event) => ({
+          memoryId: event.memoryId,
+          kind: event.kind,
+          text: event.searchText,
+          lifecycle: event.lifecycle,
+          sourceRef: event.sourceRef ?? "",
+          eventTime: event.eventTime,
+        })),
+      };
+    },
+  };
+}
+
+function memoryForgetTool(store, refresh) {
+  return {
+    name: "memory_forget",
+    description: "Soft-delete a memory. The version chain stays in history and can still be exported.",
+    parameters: {
+      type: "object",
+      properties: {
+        memoryId: { type: "string" },
+      },
+      required: ["memoryId"],
+      additionalProperties: false,
+    },
+    output: {
+      schema: {
+        type: "object",
+        properties: {
+          memoryId: { type: "string" },
+          eventId: { type: "number" },
+          lifecycle: { type: "string" },
+        },
+        required: ["memoryId", "eventId", "lifecycle"],
+        additionalProperties: false,
+      },
+      render: (_args, value) => renderText(value),
+    },
+    execute: async (args) => {
+      const event = await store.transition(String(args.memoryId), "soft_deleted");
+      refresh();
+      return {
+        memoryId: event.memoryId,
+        eventId: event.eventId,
+        lifecycle: event.lifecycle,
+      };
+    },
+  };
+}
+
+function memoryExportTool(store) {
+  return {
+    name: "memory_export",
+    description: "Export the complete memory event history as JSONL, including superseded versions.",
+    parameters: {
+      type: "object",
+      properties: {
+        limit: { type: "number", description: "Maximum events, default 200, max 1000." },
+      },
+      additionalProperties: false,
+    },
+    output: {
+      schema: {
+        type: "object",
+        properties: {
+          lines: { type: "number" },
+          jsonl: { type: "string" },
+        },
+        required: ["lines", "jsonl"],
+        additionalProperties: false,
+      },
+      render: (_args, value) => renderText(value),
+    },
+    execute: async (args) => {
+      const limit = Math.min(Math.max(Number(args.limit ?? 200), 1), 1000);
+      const lines = [];
+      for await (const line of store.exportJsonl()) {
+        lines.push(line.trim());
+        if (lines.length >= limit) break;
+      }
+      return { lines: lines.length, jsonl: lines.join("\n") };
     },
   };
 }

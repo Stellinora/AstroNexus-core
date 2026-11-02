@@ -8,6 +8,7 @@ import type {
   CorrectResult,
   IngestInput,
   IngestResult,
+  ListQuery,
   MaintenanceOptions,
   MaintenanceResult,
   MemoryEvent,
@@ -103,6 +104,16 @@ export class FakeMemoryStore implements MemoryStore {
 
   boot(request: BootRequest = {}): BootSnapshot {
     return buildBootSnapshot(this.#heads(), request);
+  }
+
+  async list(query: ListQuery = {}): Promise<readonly MemoryEvent[]> {
+    const lifecycles = query.lifecycles ?? ["active"];
+    const limit = query.limit ?? 50;
+    return this.#heads()
+      .filter((event) => lifecycles.includes(event.lifecycle))
+      .filter((event) => (query.kind ? event.kind === query.kind : true))
+      .sort((left, right) => right.eventTime - left.eventTime)
+      .slice(0, limit);
   }
 
   async maintenance(options: MaintenanceOptions = {}): Promise<MaintenanceResult> {
