@@ -105,8 +105,9 @@ core/
 - [x] 系统提示自述改为 AstroNexus（preset 补丁待真实 key 复验）
 - [x] `domain/memory` 契约 + SQLite 最小闭环（ingest/retrieve/boot/correct/export）
 - [x] `memory` 插件：`session/event` 入库 + `systemPrompt.context` 注入
-- [ ] `memory_search` / `memory_remember` 工具
-- [ ] 反思 Worker（评分、去重、晋升）
+- [x] `memory_search` / `memory_remember` / `memory_correct` 工具
+- [x] `astronexus-reflect`：去重、衰减、归档（纯规则）
+- [ ] LLM 反思：摘要、偏好提取、晋升
 
 ## 校验
 
