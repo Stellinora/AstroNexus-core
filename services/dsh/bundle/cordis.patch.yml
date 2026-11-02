@@ -47,5 +47,7 @@
 - insert:
     - id: astronexus-theme
       name: '@astronexus/dsh-bundle'
+    - id: astronexus-memory
+      name: '@astronexus/dsh-bundle/memory'
 
 # 后续插件行（memory / reflect / orchestrate）在入口实现后追加。

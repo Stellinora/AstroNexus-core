@@ -10,10 +10,12 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "test": "node --test --experimental-strip-types services/dsh/bundle/tests/memory/boot.test.ts services/dsh/bundle/tests/memory/contract.test.ts services/dsh/bundle/tests/memory/sqlite.test.ts",
     "guard": "depcruise services packages plugins mcp ops --config .dependency-cruiser.cjs --no-progress",
-    "check": "pnpm run typecheck && pnpm run guard"
+    "check": "pnpm run typecheck && pnpm run guard && pnpm run test"
   },
   "devDependencies": {
+    "@types/node": "^24.19.2",
     "dependency-cruiser": "^18.7.0",
     "typescript": "^5.7.0"
   }
