@@ -23,6 +23,7 @@
     ".": "./lib/index.js",
     "./client": "./lib/client.js",
     "./memory": "./src/memory/index.js",
+    "./reflect": "./src/reflect/index.js",
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./locale/*.json": "./locale/*.json",
     "./package.json": "./package.json"

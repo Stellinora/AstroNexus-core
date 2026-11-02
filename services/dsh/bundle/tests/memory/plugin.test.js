@@ -18,6 +18,13 @@ function createContext() {
         return () => {};
       },
     },
+    tools: {
+      defs: new Map(),
+      register(definition) {
+        this.defs.set(definition.name, definition);
+        return () => this.defs.delete(definition.name);
+      },
+    },
     effect(fn) {
       const disposer = fn();
       if (typeof disposer === "function") disposers.push(disposer);
@@ -64,6 +71,46 @@ test("memory plugin ingests text messages and refreshes boot context", async () 
     const text = ctx.systemPrompt.spec.text();
     assert.equal(text.split("3080").length - 1, 1);
     assert.match(text, /- \[reflection\] 已记录/);
+  } finally {
+    ctx.dispose();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("memory plugin registers search, remember, and correct tools", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "astronexus-memory-tools-"));
+  const ctx = createContext();
+  try {
+    apply(ctx, { dbPath: join(dir, "memory.db"), bootTokenBudget: 200 });
+    const exec = { signal: new AbortController().signal };
+
+    const remember = ctx.tools.defs.get("memory_remember");
+    const search = ctx.tools.defs.get("memory_search");
+    const correct = ctx.tools.defs.get("memory_correct");
+    assert.equal(typeof remember?.execute, "function");
+    assert.equal(typeof search?.execute, "function");
+    assert.equal(typeof correct?.execute, "function");
+
+    const stored = await remember.execute({ text: "端口是 3080", kind: "fact" }, exec);
+    assert.equal(typeof stored.memoryId, "string");
+    assert.equal(typeof stored.eventId, "number");
+
+    const found = await search.execute({ query: "3080" }, exec);
+    assert.equal(found.hits.length, 1);
+    assert.equal(found.hits[0].memoryId, stored.memoryId);
+
+    const fixed = await correct.execute(
+      { memoryId: stored.memoryId, text: "端口是 8080" },
+      exec,
+    );
+    assert.equal(fixed.previousEventId, stored.eventId);
+
+    const oldHits = await search.execute({ query: "3080" }, exec);
+    const newHits = await search.execute({ query: "8080" }, exec);
+    assert.equal(oldHits.hits.length, 0);
+    assert.equal(newHits.hits.length, 1);
+    assert.match(ctx.systemPrompt.spec.text(), /8080/);
+    assert.doesNotMatch(ctx.systemPrompt.spec.text(), /3080/);
   } finally {
     ctx.dispose();
     rmSync(dir, { recursive: true, force: true });

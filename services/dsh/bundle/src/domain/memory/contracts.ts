@@ -87,7 +87,20 @@ export interface MemoryStore {
   correct(input: CorrectInput): Promise<CorrectResult>;
   transition(memoryId: string, to: MemoryLifecycle): Promise<MemoryEvent>;
   retrieve(query: RetrieveQuery): Promise<readonly RetrievalHit[]>;
+  maintenance(options?: MaintenanceOptions): Promise<MaintenanceResult>;
   boot(request?: BootRequest): BootSnapshot;
   exportJsonl(): AsyncIterable<string>;
   close(): Promise<void>;
+}
+
+export interface MaintenanceOptions {
+  readonly now?: number;
+  readonly decayAfterMs?: number;
+  readonly archiveAfterMs?: number;
+}
+
+export interface MaintenanceResult {
+  readonly archivedDuplicates: number;
+  readonly decayed: number;
+  readonly archived: number;
 }

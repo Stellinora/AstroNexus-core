@@ -8,12 +8,15 @@ import type {
   CorrectResult,
   IngestInput,
   IngestResult,
+  MaintenanceOptions,
+  MaintenanceResult,
   MemoryEvent,
   MemoryLifecycle,
   MemoryStore,
   RetrieveQuery,
   RetrievalHit,
 } from "./contracts.ts";
+import { planMaintenance } from "./maintenance.ts";
 
 export interface FakeStoreOptions {
   readonly now?: () => number;
@@ -100,6 +103,14 @@ export class FakeMemoryStore implements MemoryStore {
 
   boot(request: BootRequest = {}): BootSnapshot {
     return buildBootSnapshot(this.#heads(), request);
+  }
+
+  async maintenance(options: MaintenanceOptions = {}): Promise<MaintenanceResult> {
+    const plan = planMaintenance(this.#heads(), options);
+    for (const action of plan.actions) {
+      await this.transition(action.memoryId, action.to);
+    }
+    return plan.result;
   }
 
   async *exportJsonl(): AsyncIterable<string> {

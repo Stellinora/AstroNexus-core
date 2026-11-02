@@ -10,8 +10,10 @@ interface StoreCase {
   readonly create: () => Promise<MemoryStore>;
 }
 
+const TEST_NOW = 1_700_000_000_000;
+
 function cases(): StoreCase[] {
-  let tick = 1_700_000_000_000;
+  let tick = TEST_NOW;
   const now = () => {
     tick += 1;
     return tick;
@@ -154,6 +156,67 @@ for (const storeCase of cases()) {
       assert.equal(lines.length, 2);
       assert.match(lines[0] ?? "", /use SQLite/);
       assert.match(lines[1] ?? "", /use Postgres later/);
+    } finally {
+      await store.close();
+    }
+  });
+
+  test(`${storeCase.name}: maintenance archives duplicate active heads`, async () => {
+    const store = await storeCase.create();
+    try {
+      await store.ingest({
+        kind: "fact",
+        payload: { text: "same fact" },
+        searchText: "same fact",
+      });
+      await store.ingest({
+        kind: "fact",
+        payload: { text: "  Same   fact " },
+        searchText: "  Same   fact ",
+      });
+      const result = await store.maintenance({ now: TEST_NOW + 10 });
+      assert.equal(result.archivedDuplicates, 1);
+      const hits = await store.retrieve({ text: "same fact" });
+      assert.equal(hits.length, 1);
+    } finally {
+      await store.close();
+    }
+  });
+
+  test(`${storeCase.name}: maintenance decays stale active memories`, async () => {
+    const store = await storeCase.create();
+    try {
+      const created = await store.ingest({
+        kind: "fact",
+        payload: { text: "old fact" },
+        searchText: "old fact",
+        eventTime: 1_000,
+      });
+      const result = await store.maintenance({
+        now: 1_000 + 91 * 24 * 60 * 60 * 1000,
+      });
+      assert.equal(result.decayed, 1);
+      assert.equal(store.boot().items.length, 0);
+      assert.equal((await store.retrieve({ text: "old fact" })).length, 0);
+      assert.equal(created.created, true);
+    } finally {
+      await store.close();
+    }
+  });
+
+  test(`${storeCase.name}: maintenance archives old decayed heads`, async () => {
+    const store = await storeCase.create();
+    try {
+      const created = await store.ingest({
+        kind: "workflow",
+        payload: { text: "old workflow" },
+        searchText: "old workflow",
+      });
+      const decayed = await store.transition(created.event.memoryId, "decayed");
+      const result = await store.maintenance({
+        now: decayed.eventTime + 181 * 24 * 60 * 60 * 1000,
+      });
+      assert.equal(result.archived, 1);
     } finally {
       await store.close();
     }

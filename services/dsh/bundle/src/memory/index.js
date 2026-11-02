@@ -4,9 +4,10 @@ import { join } from "node:path";
 import { SqliteMemoryStore } from "../domain/memory/sqlite-store.ts";
 
 export const name = "astronexus-memory";
-export const inject = ["systemPrompt"];
+export const inject = ["systemPrompt", "tools"];
 
 const TEXT_BLOCK = "text";
+const KINDS = ["fact", "preference", "decision", "workflow", "blocker", "reflection"];
 
 export function apply(ctx, config = {}) {
   const home = process.env.DSH_HOME || join(homedir(), ".dsh");
@@ -54,9 +55,163 @@ export function apply(ctx, config = {}) {
     }),
   );
 
+  ctx.effect(() => ctx.tools.register(memorySearchTool(store)));
+  ctx.effect(() => ctx.tools.register(memoryRememberTool(store, refresh)));
+  ctx.effect(() => ctx.tools.register(memoryCorrectTool(store, refresh)));
+
   ctx.effect(() => () => {
     store.close().catch(() => {});
   });
+}
+
+function memorySearchTool(store) {
+  return {
+    name: "memory_search",
+    description:
+      "Search long-term memory for relevant facts, preferences, decisions, workflows, blockers, or reflections.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Search text." },
+        kind: { type: "string", enum: KINDS, description: "Restrict to one memory kind." },
+        limit: { type: "number", description: "Maximum hits, default 10." },
+      },
+      required: ["query"],
+      additionalProperties: false,
+    },
+    output: {
+      schema: {
+        type: "object",
+        properties: {
+          hits: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                memoryId: { type: "string" },
+                kind: { type: "string" },
+                text: { type: "string" },
+                sourceRef: { type: "string" },
+                score: { type: "number" },
+              },
+              required: ["memoryId", "kind", "text", "sourceRef", "score"],
+              additionalProperties: false,
+            },
+          },
+        },
+        required: ["hits"],
+        additionalProperties: false,
+      },
+      render: (_args, value) => renderText(value),
+    },
+    execute: async (args) => {
+      const hits = await store.retrieve({
+        text: String(args.query ?? ""),
+        ...(args.kind ? { kind: args.kind } : {}),
+        ...(args.limit ? { limit: Number(args.limit) } : {}),
+      });
+      return {
+        hits: hits.map((hit) => ({
+          memoryId: hit.event.memoryId,
+          kind: hit.event.kind,
+          text: hit.event.searchText,
+          sourceRef: hit.event.sourceRef ?? "",
+          score: hit.score,
+        })),
+      };
+    },
+  };
+}
+
+function memoryRememberTool(store, refresh) {
+  return {
+    name: "memory_remember",
+    description: "Store an explicit user-provided fact, preference, decision, workflow, blocker, or reflection.",
+    parameters: {
+      type: "object",
+      properties: {
+        text: { type: "string", description: "Memory text to store." },
+        kind: { type: "string", enum: KINDS, description: "Memory kind, default fact." },
+        sourceRef: { type: "string", description: "Optional source reference." },
+      },
+      required: ["text"],
+      additionalProperties: false,
+    },
+    output: {
+      schema: {
+        type: "object",
+        properties: {
+          memoryId: { type: "string" },
+          eventId: { type: "number" },
+        },
+        required: ["memoryId", "eventId"],
+        additionalProperties: false,
+      },
+      render: (_args, value) => renderText(value),
+    },
+    execute: async (args) => {
+      const text = String(args.text ?? "").trim();
+      if (text === "") throw new Error("memory_remember requires non-empty text");
+      const result = await store.ingest({
+        kind: args.kind ?? "fact",
+        payload: { text },
+        searchText: text,
+        ...(args.sourceRef ? { sourceRef: String(args.sourceRef) } : {}),
+      });
+      if (result.created) refresh();
+      return { memoryId: result.event.memoryId, eventId: result.event.eventId };
+    },
+  };
+}
+
+function memoryCorrectTool(store, refresh) {
+  return {
+    name: "memory_correct",
+    description: "Replace a memory's current content with a corrected version; the previous version stays in history.",
+    parameters: {
+      type: "object",
+      properties: {
+        memoryId: { type: "string" },
+        text: { type: "string" },
+        kind: { type: "string", enum: KINDS },
+      },
+      required: ["memoryId", "text"],
+      additionalProperties: false,
+    },
+    output: {
+      schema: {
+        type: "object",
+        properties: {
+          memoryId: { type: "string" },
+          eventId: { type: "number" },
+          previousEventId: { type: "number" },
+        },
+        required: ["memoryId", "eventId", "previousEventId"],
+        additionalProperties: false,
+      },
+      render: (_args, value) => renderText(value),
+    },
+    execute: async (args) => {
+      const text = String(args.text ?? "").trim();
+      if (text === "") throw new Error("memory_correct requires non-empty text");
+      const result = await store.correct({
+        memoryId: String(args.memoryId),
+        payload: { text },
+        searchText: text,
+        ...(args.kind ? { kind: args.kind } : {}),
+      });
+      refresh();
+      return {
+        memoryId: result.event.memoryId,
+        eventId: result.event.eventId,
+        previousEventId: result.previousEventId ?? 0,
+      };
+    },
+  };
+}
+
+function renderText(value) {
+  return [{ type: TEXT_BLOCK, text: JSON.stringify(value, null, 2) }];
 }
 
 function extractText(message) {

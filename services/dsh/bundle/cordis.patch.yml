@@ -49,5 +49,7 @@
       name: '@astronexus/dsh-bundle'
     - id: astronexus-memory
       name: '@astronexus/dsh-bundle/memory'
+    - id: astronexus-reflect
+      name: '@astronexus/dsh-bundle/reflect'
 
 # 后续插件行（memory / reflect / orchestrate）在入口实现后追加。

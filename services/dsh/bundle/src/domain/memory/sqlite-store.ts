@@ -15,9 +15,12 @@ import type {
   MemoryKind,
   MemoryLifecycle,
   MemoryStore,
+  MaintenanceOptions,
+  MaintenanceResult,
   RetrieveQuery,
   RetrievalHit,
 } from "./contracts.ts";
+import { planMaintenance } from "./maintenance.ts";
 import { headClause, MEMORY_SCHEMA_SQL } from "./schema.ts";
 
 interface EventRow {
@@ -162,6 +165,21 @@ export class SqliteMemoryStore implements MemoryStore {
       )
       .all() as unknown as EventRow[];
     return buildBootSnapshot(rows.map(toEvent), request);
+  }
+
+  async maintenance(options: MaintenanceOptions = {}): Promise<MaintenanceResult> {
+    const heads = this.#db
+      .prepare(
+        `SELECT e.* FROM memory_event e
+         WHERE ${headClause("e")}
+         ORDER BY e.id ASC`,
+      )
+      .all() as unknown as EventRow[];
+    const plan = planMaintenance(heads.map(toEvent), options);
+    for (const action of plan.actions) {
+      await this.transition(action.memoryId, action.to);
+    }
+    return plan.result;
   }
 
   async *exportJsonl(): AsyncIterable<string> {
