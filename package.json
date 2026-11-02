@@ -10,7 +10,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "node --test --experimental-strip-types services/dsh/bundle/tests/memory/boot.test.ts services/dsh/bundle/tests/memory/contract.test.ts services/dsh/bundle/tests/memory/sqlite.test.ts",
+    "test": "node --test --experimental-strip-types services/dsh/bundle/tests/memory/boot.test.ts services/dsh/bundle/tests/memory/contract.test.ts services/dsh/bundle/tests/memory/sqlite.test.ts services/dsh/bundle/tests/memory/plugin.test.js",
     "guard": "depcruise services packages plugins mcp ops --config .dependency-cruiser.cjs --no-progress",
     "check": "pnpm run typecheck && pnpm run guard && pnpm run test"
   },

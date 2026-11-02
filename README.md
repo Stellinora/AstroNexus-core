@@ -103,6 +103,10 @@ core/
 - [x] favicon / 页面标题 / manifest / 插件显示名
 - [x] hero “预览版”徽章隐藏
 - [x] 系统提示自述改为 AstroNexus（preset 补丁待真实 key 复验）
+- [x] `domain/memory` 契约 + SQLite 最小闭环（ingest/retrieve/boot/correct/export）
+- [x] `memory` 插件：`session/event` 入库 + `systemPrompt.context` 注入
+- [ ] `memory_search` / `memory_remember` 工具
+- [ ] 反思 Worker（评分、去重、晋升）
 
 ## 校验
 
