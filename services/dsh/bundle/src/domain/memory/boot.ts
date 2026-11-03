@@ -17,6 +17,18 @@ const KIND_PRIORITY: Record<MemoryKind, number> = {
 
 export const DEFAULT_TOKEN_BUDGET = 800;
 export const DEFAULT_MAX_ITEMS = 12;
+export const ACCESS_HALF_LIFE_MS = 90 * 24 * 60 * 60 * 1000;
+
+export function effectiveAccessScore(
+  count: number,
+  lastAccessedAt: number,
+  now = Date.now(),
+  halfLifeMs = ACCESS_HALF_LIFE_MS,
+): number {
+  if (count <= 0) return 0;
+  const age = Math.max(0, now - lastAccessedAt);
+  return count * Math.pow(0.5, age / halfLifeMs);
+}
 
 export function estimateTokens(text: string): number {
   let ascii = 0;
@@ -31,7 +43,7 @@ export function estimateTokens(text: string): number {
 export function buildBootSnapshot(
   events: readonly MemoryEvent[],
   request: BootRequest = {},
-  accessCounts: ReadonlyMap<string, number> = new Map(),
+  accessScores: ReadonlyMap<string, number> = new Map(),
 ): BootSnapshot {
   const budget = request.tokenBudget ?? DEFAULT_TOKEN_BUDGET;
   const maxItems = request.maxItems ?? DEFAULT_MAX_ITEMS;
@@ -43,8 +55,8 @@ export function buildBootSnapshot(
     .sort((left, right) => {
       const byKind = KIND_PRIORITY[left.kind] - KIND_PRIORITY[right.kind];
       if (byKind !== 0) return byKind;
-      const leftAccess = accessCounts.get(left.memoryId) ?? 0;
-      const rightAccess = accessCounts.get(right.memoryId) ?? 0;
+      const leftAccess = accessScores.get(left.memoryId) ?? 0;
+      const rightAccess = accessScores.get(right.memoryId) ?? 0;
       if (leftAccess !== rightAccess) return rightAccess - leftAccess;
       return right.eventTime - left.eventTime;
     });

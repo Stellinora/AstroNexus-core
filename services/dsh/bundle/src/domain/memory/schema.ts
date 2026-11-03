@@ -30,6 +30,11 @@ CREATE TABLE IF NOT EXISTS memory_access (
   access_count INTEGER NOT NULL DEFAULT 0,
   last_accessed_at INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS memory_reflection (
+  event_id INTEGER PRIMARY KEY,
+  reflected_at INTEGER NOT NULL
+);
 `;
 
 export function headClause(alias = "e"): string {

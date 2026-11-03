@@ -3,7 +3,7 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
-import { buildBootSnapshot } from "./boot.ts";
+import { buildBootSnapshot, effectiveAccessScore } from "./boot.ts";
 import { emptyKindCounts, emptyLifecycleCounts } from "./counts.ts";
 import type {
   BootRequest,
@@ -165,18 +165,26 @@ export class SqliteMemoryStore implements MemoryStore {
   boot(request: BootRequest = {}): BootSnapshot {
     const rows = this.#db
       .prepare(
-        `SELECT e.*, COALESCE(a.access_count, 0) AS access_count
+        `SELECT e.*, COALESCE(a.access_count, 0) AS access_count,
+                COALESCE(a.last_accessed_at, 0) AS last_accessed_at
          FROM memory_event e
          LEFT JOIN memory_access a ON a.memory_id = e.memory_id
          WHERE e.lifecycle = 'active' AND ${headClause("e")}
          ORDER BY e.event_time DESC
          LIMIT 200`,
       )
-      .all() as unknown as (EventRow & { access_count: number })[];
-    const counts = new Map(
-      rows.map((row) => [row.memory_id, Number(row.access_count)] as const),
+      .all() as unknown as (EventRow & { access_count: number; last_accessed_at: number })[];
+    const now = this.#now();
+    const scores = new Map(
+      rows.map(
+        (row) =>
+          [
+            row.memory_id,
+            effectiveAccessScore(Number(row.access_count), Number(row.last_accessed_at), now),
+          ] as const,
+      ),
     );
-    return buildBootSnapshot(rows.map(toEvent), request, counts);
+    return buildBootSnapshot(rows.map(toEvent), request, scores);
   }
 
   async list(query: ListQuery = {}): Promise<readonly MemoryEvent[]> {
@@ -198,6 +206,28 @@ export class SqliteMemoryStore implements MemoryStore {
       )
       .all(...params, limit) as unknown as EventRow[];
     return rows.map(toEvent);
+  }
+
+  async recentUnreflected(limit = 50): Promise<readonly MemoryEvent[]> {
+    const rows = this.#db
+      .prepare(
+        `SELECT e.* FROM memory_event e
+         WHERE e.source_ref IS NOT NULL
+           AND e.kind IN ('fact', 'reflection')
+           AND NOT EXISTS (SELECT 1 FROM memory_reflection r WHERE r.event_id = e.id)
+         ORDER BY e.id ASC
+         LIMIT ?`,
+      )
+      .all(limit) as unknown as EventRow[];
+    return rows.map(toEvent);
+  }
+
+  async markReflected(eventIds: readonly number[]): Promise<void> {
+    const statement = this.#db.prepare(
+      "INSERT OR IGNORE INTO memory_reflection(event_id, reflected_at) VALUES (?, ?)",
+    );
+    const at = this.#now();
+    for (const eventId of eventIds) statement.run(eventId, at);
   }
 
   async maintenance(options: MaintenanceOptions = {}): Promise<MaintenanceResult> {

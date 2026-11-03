@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { buildBootSnapshot } from "./boot.ts";
+import { buildBootSnapshot, effectiveAccessScore } from "./boot.ts";
 import { emptyKindCounts, emptyLifecycleCounts } from "./counts.ts";
 import type {
   BootRequest,
@@ -29,6 +29,7 @@ export interface FakeStoreOptions {
 export class FakeMemoryStore implements MemoryStore {
   readonly #events: MemoryEvent[] = [];
   readonly #access = new Map<string, { count: number; last: number }>();
+  readonly #reflected = new Set<number>();
   readonly #now: () => number;
   #nextId = 1;
 
@@ -109,10 +110,14 @@ export class FakeMemoryStore implements MemoryStore {
   }
 
   boot(request: BootRequest = {}): BootSnapshot {
-    const counts = new Map(
-      [...this.#access].map(([memoryId, value]) => [memoryId, value.count] as const),
+    const now = this.#now();
+    const scores = new Map(
+      [...this.#access].map(
+        ([memoryId, value]) =>
+          [memoryId, effectiveAccessScore(value.count, value.last, now)] as const,
+      ),
     );
-    return buildBootSnapshot(this.#heads(), request, counts);
+    return buildBootSnapshot(this.#heads(), request, scores);
   }
 
   async list(query: ListQuery = {}): Promise<readonly MemoryEvent[]> {
@@ -131,6 +136,18 @@ export class FakeMemoryStore implements MemoryStore {
       await this.transition(action.memoryId, action.to);
     }
     return plan.result;
+  }
+
+  async recentUnreflected(limit = 50): Promise<readonly MemoryEvent[]> {
+    return this.#events
+      .filter((event) => !this.#reflected.has(event.eventId))
+      .filter((event) => event.sourceRef !== null)
+      .filter((event) => event.kind === "fact" || event.kind === "reflection")
+      .slice(0, limit);
+  }
+
+  async markReflected(eventIds: readonly number[]): Promise<void> {
+    for (const eventId of eventIds) this.#reflected.add(eventId);
   }
 
   async stats(): Promise<MemoryStats> {

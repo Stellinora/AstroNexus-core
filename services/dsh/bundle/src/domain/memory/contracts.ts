@@ -94,6 +94,8 @@ export interface MemoryStore {
   transition(memoryId: string, to: MemoryLifecycle): Promise<MemoryEvent>;
   retrieve(query: RetrieveQuery): Promise<readonly RetrievalHit[]>;
   list(query?: ListQuery): Promise<readonly MemoryEvent[]>;
+  recentUnreflected(limit?: number): Promise<readonly MemoryEvent[]>;
+  markReflected(eventIds: readonly number[]): Promise<void>;
   maintenance(options?: MaintenanceOptions): Promise<MaintenanceResult>;
   stats(): Promise<MemoryStats>;
   boot(request?: BootRequest): BootSnapshot;
