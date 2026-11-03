@@ -9,6 +9,14 @@ module.exports = {
       from: { path: '^(packages|plugins|mcp)/|(^|/)domain/' },
       to: { path: '@deepseek-ai' },
     },
+    {
+      name: 'sqlite-only-in-domain',
+      severity: 'error',
+      comment:
+        'Only domain store implementations may import node:sqlite; plugins must use the domain interfaces (docs/15, ADR 0002).',
+      from: { pathNot: '^(services/dsh/bundle/src/domain)/' },
+      to: { path: 'node:sqlite' },
+    },
   ],
   options: {
     doNotFollow: { path: 'node_modules' },

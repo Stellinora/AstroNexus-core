@@ -5,6 +5,7 @@ import type {
   MemoryEvent,
   MemoryKind,
 } from "./contracts.ts";
+import { isVisible } from "../scope.ts";
 
 const KIND_PRIORITY: Record<MemoryKind, number> = {
   preference: 0,
@@ -51,6 +52,7 @@ export function buildBootSnapshot(
 
   const candidates = events
     .filter((event) => event.lifecycle === "active")
+    .filter((event) => isVisible(event, request.projectId ?? null))
     .filter((event) => (kinds ? kinds.includes(event.kind) : true))
     .sort((left, right) => {
       const byKind = KIND_PRIORITY[left.kind] - KIND_PRIORITY[right.kind];

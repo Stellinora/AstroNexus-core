@@ -157,8 +157,13 @@ export async function reflectOnce(ctx, stores, options = {}) {
 
   const parsed = parseReflectionOutput(output);
   const episodeIds = batch.map((episode) => episode.episodeId);
+  const projectId = options.projectId ?? null;
+  const visibility = options.visibility ?? (projectId ? "project" : "private");
 
-  const existingKnowledge = await stores.memory.list({ limit: 500 });
+  const existingKnowledge = await stores.memory.list({
+    limit: 500,
+    ...(projectId ? { projectId } : {}),
+  });
   const knowledgeSeen = new Set(
     existingKnowledge.map((item) => `${item.kind}:${normalizeMemoryText(item.searchText)}`),
   );
@@ -172,11 +177,16 @@ export async function reflectOnce(ctx, stores, options = {}) {
       payload: { text: item.text },
       searchText: item.text,
       sourceRef: `episode:${episodeIds.join(",")}`,
+      projectId,
+      visibility,
     });
     knowledgeWritten += 1;
   }
 
-  const existingExperience = await stores.experience.list({ limit: 500 });
+  const existingExperience = await stores.experience.list({
+    limit: 500,
+    ...(projectId ? { projectId } : {}),
+  });
   const experienceSeen = new Set(
     existingExperience.map(
       (item) =>

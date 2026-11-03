@@ -9,6 +9,8 @@ CREATE TABLE IF NOT EXISTS memory_event (
   event_time INTEGER NOT NULL,
   ingested_at INTEGER NOT NULL,
   lifecycle TEXT NOT NULL,
+  project_id TEXT,
+  visibility TEXT NOT NULL DEFAULT 'private',
   source_ref TEXT,
   external_id TEXT
 );

@@ -1,3 +1,5 @@
+import type { Visibility } from "../scope.ts";
+
 export type MemoryKind =
   | "fact"
   | "preference"
@@ -18,6 +20,8 @@ export interface MemoryEvent {
   readonly eventTime: number;
   readonly ingestedAt: number;
   readonly lifecycle: MemoryLifecycle;
+  readonly projectId: string | null;
+  readonly visibility: Visibility;
   readonly sourceRef: string | null;
   readonly externalId: string | null;
 }
@@ -30,6 +34,8 @@ export interface IngestInput {
   readonly eventTime?: number;
   readonly sourceRef?: string | null;
   readonly externalId?: string | null;
+  readonly projectId?: string | null;
+  readonly visibility?: Visibility;
 }
 
 export interface IngestResult {
@@ -44,6 +50,8 @@ export interface CorrectInput {
   readonly searchText?: string;
   readonly sourceRef?: string | null;
   readonly externalId?: string | null;
+  readonly projectId?: string | null;
+  readonly visibility?: Visibility;
 }
 
 export interface CorrectResult {
@@ -55,6 +63,7 @@ export interface RetrieveQuery {
   readonly text: string;
   readonly kind?: MemoryKind;
   readonly sourceRefPrefix?: string;
+  readonly projectId?: string | null;
   readonly limit?: number;
 }
 
@@ -66,6 +75,7 @@ export interface RetrievalHit {
 export interface ListQuery {
   readonly kind?: MemoryKind;
   readonly lifecycles?: readonly MemoryLifecycle[];
+  readonly projectId?: string | null;
   readonly limit?: number;
 }
 
@@ -73,6 +83,7 @@ export interface BootRequest {
   readonly tokenBudget?: number;
   readonly maxItems?: number;
   readonly kinds?: readonly MemoryKind[];
+  readonly projectId?: string | null;
 }
 
 export interface BootItem {

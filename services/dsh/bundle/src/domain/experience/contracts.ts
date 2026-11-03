@@ -93,5 +93,6 @@ export interface ExperienceStore {
   feedback(input: ExperienceFeedbackInput): Promise<ExperienceFeedbackResult>;
   transition(experienceId: string, to: ExperienceLifecycle): Promise<ExperienceEvent>;
   maintenance(options?: ExperienceMaintenanceOptions): Promise<ExperienceMaintenanceResult>;
+  exportJsonl(): AsyncIterable<string>;
   close(): Promise<void>;
 }

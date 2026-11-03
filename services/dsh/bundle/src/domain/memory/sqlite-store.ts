@@ -24,6 +24,7 @@ import type {
   RetrievalHit,
 } from "./contracts.ts";
 import { planMaintenance } from "./maintenance.ts";
+import { isVisible } from "../scope.ts";
 import { headClause, MEMORY_SCHEMA_SQL } from "./schema.ts";
 
 interface EventRow {
@@ -36,6 +37,8 @@ interface EventRow {
   event_time: number;
   ingested_at: number;
   lifecycle: string;
+  project_id: string | null;
+  visibility: string;
   source_ref: string | null;
   external_id: string | null;
 }
@@ -52,8 +55,10 @@ export class SqliteMemoryStore implements MemoryStore {
     if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
     this.#db = new DatabaseSync(path);
     this.#db.exec("PRAGMA journal_mode = WAL;");
+    this.#db.exec("PRAGMA busy_timeout = 5000;");
     this.#db.exec("PRAGMA foreign_keys = ON;");
     this.#applySchema();
+    this.#ensureColumns();
     this.#now = options.now ?? (() => Date.now());
   }
 
@@ -70,6 +75,8 @@ export class SqliteMemoryStore implements MemoryStore {
       searchText: input.searchText ?? JSON.stringify(input.payload),
       eventTime: input.eventTime ?? this.#now(),
       lifecycle: "active",
+      projectId: input.projectId ?? null,
+      visibility: input.visibility ?? "private",
       sourceRef: input.sourceRef ?? null,
       externalId: input.externalId ?? null,
     });
@@ -87,6 +94,8 @@ export class SqliteMemoryStore implements MemoryStore {
       searchText: input.searchText ?? current.searchText,
       eventTime: this.#now(),
       lifecycle: "active",
+      projectId: input.projectId !== undefined ? input.projectId : current.projectId,
+      visibility: input.visibility ?? current.visibility,
       sourceRef: input.sourceRef ?? current.sourceRef,
       externalId: input.externalId ?? null,
     });
@@ -105,6 +114,8 @@ export class SqliteMemoryStore implements MemoryStore {
       searchText: current.searchText,
       eventTime: this.#now(),
       lifecycle: to,
+      projectId: current.projectId,
+      visibility: current.visibility,
       sourceRef: current.sourceRef,
       externalId: null,
     });
@@ -140,8 +151,11 @@ export class SqliteMemoryStore implements MemoryStore {
            ORDER BY score DESC, e.event_time DESC
            LIMIT ?`,
         )
-        .all(...params, limit) as unknown as (EventRow & { score: number })[];
-      const hits = rows.map((row) => ({ event: toEvent(row), score: Number(row.score) }));
+        .all(...params, 200) as unknown as (EventRow & { score: number })[];
+      const hits = rows
+        .map((row) => ({ event: toEvent(row), score: Number(row.score) }))
+        .filter((hit) => isVisible(hit.event, query.projectId ?? null))
+        .slice(0, limit);
       for (const hit of hits) this.#recordAccess(hit.event.memoryId);
       return hits;
     }
@@ -156,8 +170,11 @@ export class SqliteMemoryStore implements MemoryStore {
          ORDER BY e.event_time DESC
          LIMIT ?`,
       )
-      .all(...params, limit) as unknown as EventRow[];
-    const hits = rows.map((row) => ({ event: toEvent(row), score: 1 }));
+      .all(...params, 200) as unknown as EventRow[];
+    const hits = rows
+      .map((row) => ({ event: toEvent(row), score: 1 }))
+      .filter((hit) => isVisible(hit.event, query.projectId ?? null))
+      .slice(0, limit);
     for (const hit of hits) this.#recordAccess(hit.event.memoryId);
     return hits;
   }
@@ -204,8 +221,11 @@ export class SqliteMemoryStore implements MemoryStore {
          ORDER BY e.event_time DESC
          LIMIT ?`,
       )
-      .all(...params, limit) as unknown as EventRow[];
-    return rows.map(toEvent);
+      .all(...params, 200) as unknown as EventRow[];
+    return rows
+      .map(toEvent)
+      .filter((event) => isVisible(event, query.projectId ?? null))
+      .slice(0, limit);
   }
 
   async recentUnreflected(limit = 50): Promise<readonly MemoryEvent[]> {
@@ -306,6 +326,21 @@ export class SqliteMemoryStore implements MemoryStore {
       .run(memoryId, this.#now());
   }
 
+  #ensureColumns(): void {
+    const columns = this.#db
+      .prepare("PRAGMA table_info(memory_event)")
+      .all()
+      .map((row) => String(row.name));
+    if (!columns.includes("project_id")) {
+      this.#db.exec("ALTER TABLE memory_event ADD COLUMN project_id TEXT");
+    }
+    if (!columns.includes("visibility")) {
+      this.#db.exec(
+        "ALTER TABLE memory_event ADD COLUMN visibility TEXT NOT NULL DEFAULT 'private'",
+      );
+    }
+  }
+
   #insert(input: {
     memoryId: string;
     supersedesId: number | null;
@@ -314,6 +349,8 @@ export class SqliteMemoryStore implements MemoryStore {
     searchText: string;
     eventTime: number;
     lifecycle: MemoryLifecycle;
+    projectId: string | null;
+    visibility: string;
     sourceRef: string | null;
     externalId: string | null;
   }): MemoryEvent {
@@ -323,8 +360,9 @@ export class SqliteMemoryStore implements MemoryStore {
         .prepare(
           `INSERT INTO memory_event
              (memory_id, supersedes_id, kind, payload_json, search_text,
-              event_time, ingested_at, lifecycle, source_ref, external_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              event_time, ingested_at, lifecycle, project_id, visibility,
+              source_ref, external_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           input.memoryId,
@@ -335,6 +373,8 @@ export class SqliteMemoryStore implements MemoryStore {
           input.eventTime,
           this.#now(),
           input.lifecycle,
+          input.projectId,
+          input.visibility,
           input.sourceRef,
           input.externalId,
         );
@@ -353,6 +393,8 @@ export class SqliteMemoryStore implements MemoryStore {
         eventTime: input.eventTime,
         ingestedAt: this.#now(),
         lifecycle: input.lifecycle,
+        projectId: input.projectId,
+        visibility: input.visibility as MemoryEvent["visibility"],
         sourceRef: input.sourceRef,
         externalId: input.externalId,
       };
@@ -392,6 +434,8 @@ function toEvent(row: EventRow): MemoryEvent {
     eventTime: Number(row.event_time),
     ingestedAt: Number(row.ingested_at),
     lifecycle: row.lifecycle as MemoryLifecycle,
+    projectId: row.project_id,
+    visibility: row.visibility as MemoryEvent["visibility"],
     sourceRef: row.source_ref,
     externalId: row.external_id,
   };

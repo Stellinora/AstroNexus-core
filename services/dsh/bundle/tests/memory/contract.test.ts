@@ -228,6 +228,42 @@ for (const storeCase of cases()) {
     }
   });
 
+  test(`${storeCase.name}: project and visibility filtering`, async () => {
+    const store = await storeCase.create();
+    try {
+      await store.ingest({
+        kind: "fact",
+        payload: { text: "global thing" },
+        searchText: "global thing",
+        visibility: "global",
+      });
+      await store.ingest({
+        kind: "fact",
+        payload: { text: "project thing" },
+        searchText: "project thing",
+        projectId: "p1",
+        visibility: "private",
+      });
+      await store.ingest({
+        kind: "fact",
+        payload: { text: "unscoped thing" },
+        searchText: "unscoped thing",
+      });
+
+      assert.equal((await store.retrieve({ text: "thing", projectId: "p1" })).length, 3);
+      assert.equal((await store.retrieve({ text: "thing" })).length, 2);
+      assert.equal((await store.retrieve({ text: "thing", projectId: "p2" })).length, 2);
+      assert.equal((await store.retrieve({ text: "project thing" })).length, 0);
+
+      assert.equal((await store.list({ projectId: "p1" })).length, 3);
+      assert.equal((await store.list()).length, 2);
+      assert.equal(store.boot({ projectId: "p1" }).items.length, 3);
+      assert.equal(store.boot().items.length, 2);
+    } finally {
+      await store.close();
+    }
+  });
+
   test(`${storeCase.name}: maintenance archives duplicate active heads`, async () => {
     const store = await storeCase.create();
     try {

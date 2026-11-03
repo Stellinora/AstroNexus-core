@@ -4,7 +4,7 @@ import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 import { computeConfidence } from "./confidence.ts";
-import { isExperienceVisible } from "./visibility.ts";
+import { isVisible } from "../scope.ts";
 import type {
   ExperienceDraft,
   ExperienceEvent,
@@ -59,6 +59,7 @@ export class SqliteExperienceStore implements ExperienceStore {
     if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
     this.#db = new DatabaseSync(path);
     this.#db.exec("PRAGMA journal_mode = WAL;");
+    this.#db.exec("PRAGMA busy_timeout = 5000;");
     this.#db.exec(EXPERIENCE_SCHEMA_SQL);
     this.#now = options.now ?? (() => Date.now());
   }
@@ -137,7 +138,7 @@ export class SqliteExperienceStore implements ExperienceStore {
     const hits: ExperienceHit[] = [];
     for (const row of rows) {
       const event = this.#view(row);
-      if (!isExperienceVisible(event, query.projectId ?? null)) continue;
+      if (!isVisible(event, query.projectId ?? null)) continue;
       if (!tags.every((tag) => event.tags.includes(tag))) continue;
       const tagScore = tags.length === 0 ? 0 : tags.length / Math.max(1, event.tags.length);
       hits.push({
@@ -166,7 +167,7 @@ export class SqliteExperienceStore implements ExperienceStore {
       .all(...lifecycles) as unknown as ExperienceRow[];
     return rows
       .map((row) => this.#view(row))
-      .filter((event) => isExperienceVisible(event, query.projectId ?? null))
+      .filter((event) => isVisible(event, query.projectId ?? null))
       .filter((event) => tags.every((tag) => event.tags.includes(tag)))
       .slice(0, limit);
   }
@@ -257,6 +258,17 @@ export class SqliteExperienceStore implements ExperienceStore {
 
   async close(): Promise<void> {
     this.#db.close();
+  }
+
+  async *exportJsonl(): AsyncIterable<string> {
+    const rows = this.#db
+      .prepare(
+        `SELECT e.*, ${COUNT_COLUMNS}
+         FROM experience_event e
+         ORDER BY e.id ASC`,
+      )
+      .all() as unknown as ExperienceRow[];
+    for (const row of rows) yield `${JSON.stringify(this.#view(row))}\n`;
   }
 
   #view(row: ExperienceRow): ExperienceEvent {

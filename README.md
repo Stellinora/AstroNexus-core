@@ -112,6 +112,8 @@ core/
 - [x] turn 级 episode + 反思双输出；assistant 原文不再进知识层
 - [x] 经验当轮自动注入（pre-step + runtime-context，2 条/400 字）
 - [x] 经验项目/可见性过滤 + 跨轮重新注入配置
+- [x] 知识层 project/visibility；SQLite busy_timeout + `node:sqlite` 依赖守卫
+- [x] 经验 JSONL 导出、ADR 文档
 - [x] DSH 端到端（mock provider）：episode → 知识 + 经验 → 当轮注入 + boot 只注入知识
 - [ ] 真实供应商验证（当前网关模型组上游不可用）
 - [x] 自动入库过滤（短消息、`/` 命令、空白归一化）

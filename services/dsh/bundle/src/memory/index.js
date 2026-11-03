@@ -23,9 +23,8 @@ export function apply(ctx, config = {}) {
   const experienceMaxItems = config.experienceMaxItems ?? 2;
   const experienceMaxChars = config.experienceMaxChars ?? 400;
   const experienceMinConfidence = config.experienceMinConfidence ?? 0.3;
-  const experienceProjectId = config.projectId ?? null;
-  const experienceVisibility =
-    config.experienceVisibility ?? (experienceProjectId ? "project" : "private");
+  const projectId = config.projectId ?? null;
+  const defaultVisibility = config.visibility ?? (projectId ? "project" : "private");
   const experienceReinjectAfterTurns = Math.max(
     0,
     Number(config.experienceReinjectAfterTurns ?? 0),
@@ -34,9 +33,9 @@ export function apply(ctx, config = {}) {
   const store = new SqliteMemoryStore(dbPath);
   const experience = new SqliteExperienceStore(dbPath);
   const episodes = new SqliteEpisodeStore(dbPath);
-  let snapshot = store.boot({ tokenBudget });
+  let snapshot = store.boot({ tokenBudget, projectId });
   const refresh = () => {
-    snapshot = store.boot({ tokenBudget });
+    snapshot = store.boot({ tokenBudget, projectId });
   };
 
   const buffers = new Map();
@@ -80,7 +79,7 @@ export function apply(ctx, config = {}) {
         const hits = experience.searchSync({
           situation: situation.text,
           limit: 10,
-          ...(experienceProjectId ? { projectId: experienceProjectId } : {}),
+          ...(projectId ? { projectId } : {}),
         });
         const selected = selectExperienceForInjection(hits, {
           maxItems: experienceMaxItems,
@@ -131,24 +130,29 @@ export function apply(ctx, config = {}) {
     }),
   );
 
-  ctx.effect(() => ctx.tools.register(memorySearchTool(store)));
-  ctx.effect(() => ctx.tools.register(memoryRememberTool(store, refresh)));
-  ctx.effect(() => ctx.tools.register(memoryCorrectTool(store, refresh)));
-  ctx.effect(() => ctx.tools.register(memoryListTool(store)));
+  ctx.effect(() => ctx.tools.register(memorySearchTool(store, projectId)));
+  ctx.effect(() =>
+    ctx.tools.register(
+      memoryRememberTool(store, refresh, { projectId, visibility: defaultVisibility }),
+    ),
+  );
+  ctx.effect(() => ctx.tools.register(memoryCorrectTool(store, refresh, projectId)));
+  ctx.effect(() => ctx.tools.register(memoryListTool(store, projectId)));
   ctx.effect(() => ctx.tools.register(memoryForgetTool(store, refresh)));
   ctx.effect(() => ctx.tools.register(memoryExportTool(store)));
   ctx.effect(() => ctx.tools.register(memoryStatsTool(store)));
-  ctx.effect(() => ctx.tools.register(experienceSearchTool(experience, experienceProjectId)));
+  ctx.effect(() => ctx.tools.register(experienceSearchTool(experience, projectId)));
   ctx.effect(() =>
     ctx.tools.register(
       experienceRememberTool(experience, {
-        projectId: experienceProjectId,
-        visibility: experienceVisibility,
+        projectId,
+        visibility: defaultVisibility,
       }),
     ),
   );
   ctx.effect(() => ctx.tools.register(experienceFeedbackTool(experience)));
-  ctx.effect(() => ctx.tools.register(experienceListTool(experience, experienceProjectId)));
+  ctx.effect(() => ctx.tools.register(experienceListTool(experience, projectId)));
+  ctx.effect(() => ctx.tools.register(experienceExportTool(experience)));
 
   ctx.effect(() => () => {
     store.close().catch(() => {});
@@ -213,6 +217,8 @@ export function apply(ctx, config = {}) {
         searchText: text,
         sourceRef: `${session.id}:${event.seq}`,
         externalId: `dsh:${session.id}:${event.seq}`,
+        projectId,
+        visibility: defaultVisibility,
       })
       .then((result) => {
         if (result.created) refresh();
@@ -221,7 +227,7 @@ export function apply(ctx, config = {}) {
   }
 }
 
-function memorySearchTool(store) {
+function memorySearchTool(store, defaultProjectId = null) {
   return {
     name: "memory_search",
     description: "Search knowledge (facts, preferences, decisions) in long-term memory.",
@@ -230,6 +236,7 @@ function memorySearchTool(store) {
       properties: {
         query: { type: "string", description: "Search text." },
         kind: { type: "string", enum: KINDS, description: "Restrict to one kind." },
+        projectId: { type: "string", description: "Project scope; defaults to the deployment project." },
         limit: { type: "number", description: "Maximum hits, default 10." },
       },
       required: ["query"],
@@ -243,9 +250,11 @@ function memorySearchTool(store) {
       render: (_args, value) => renderText(value),
     },
     execute: async (args) => {
+      const projectId = args.projectId ? String(args.projectId) : defaultProjectId;
       const hits = await store.retrieve({
         text: String(args.query ?? ""),
         ...(args.kind ? { kind: args.kind } : {}),
+        ...(projectId ? { projectId } : {}),
         ...(args.limit ? { limit: Number(args.limit) } : {}),
       });
       return {
@@ -261,7 +270,7 @@ function memorySearchTool(store) {
   };
 }
 
-function memoryRememberTool(store, refresh) {
+function memoryRememberTool(store, refresh, defaults = {}) {
   return {
     name: "memory_remember",
     description: "Store an explicit knowledge item (fact, preference, decision, workflow, blocker).",
@@ -271,6 +280,8 @@ function memoryRememberTool(store, refresh) {
         text: { type: "string" },
         kind: { type: "string", enum: KINDS },
         sourceRef: { type: "string" },
+        projectId: { type: "string", description: "Project scope; defaults to the deployment project." },
+        visibility: { type: "string", enum: ["private", "project", "global"] },
       },
       required: ["text"],
       additionalProperties: false,
@@ -285,11 +296,15 @@ function memoryRememberTool(store, refresh) {
     execute: async (args) => {
       const text = String(args.text ?? "").trim();
       if (text === "") throw new Error("memory_remember requires non-empty text");
+      const projectId = args.projectId ? String(args.projectId) : (defaults.projectId ?? null);
+      const visibility = args.visibility ?? defaults.visibility ?? "private";
       const result = await store.ingest({
         kind: args.kind ?? "fact",
         payload: { text },
         searchText: text,
         ...(args.sourceRef ? { sourceRef: String(args.sourceRef) } : {}),
+        projectId,
+        visibility,
       });
       if (result.created) refresh();
       return { memoryId: result.event.memoryId, eventId: result.event.eventId };
@@ -297,7 +312,7 @@ function memoryRememberTool(store, refresh) {
   };
 }
 
-function memoryCorrectTool(store, refresh) {
+function memoryCorrectTool(store, refresh, defaultProjectId = null) {
   return {
     name: "memory_correct",
     description: "Replace a knowledge item with a corrected version; history is retained.",
@@ -307,6 +322,8 @@ function memoryCorrectTool(store, refresh) {
         memoryId: { type: "string" },
         text: { type: "string" },
         kind: { type: "string", enum: KINDS },
+        projectId: { type: "string" },
+        visibility: { type: "string", enum: ["private", "project", "global"] },
       },
       required: ["memoryId", "text"],
       additionalProperties: false,
@@ -325,11 +342,14 @@ function memoryCorrectTool(store, refresh) {
     execute: async (args) => {
       const text = String(args.text ?? "").trim();
       if (text === "") throw new Error("memory_correct requires non-empty text");
+      const projectId = args.projectId ? String(args.projectId) : defaultProjectId;
       const result = await store.correct({
         memoryId: String(args.memoryId),
         payload: { text },
         searchText: text,
         ...(args.kind ? { kind: args.kind } : {}),
+        ...(projectId ? { projectId } : {}),
+        ...(args.visibility ? { visibility: args.visibility } : {}),
       });
       refresh();
       return {
@@ -341,7 +361,7 @@ function memoryCorrectTool(store, refresh) {
   };
 }
 
-function memoryListTool(store) {
+function memoryListTool(store, defaultProjectId = null) {
   return {
     name: "memory_list",
     description: "List knowledge entries, newest first.",
@@ -350,6 +370,7 @@ function memoryListTool(store) {
       properties: {
         kind: { type: "string", enum: KINDS },
         includeInactive: { type: "boolean" },
+        projectId: { type: "string" },
         limit: { type: "number" },
       },
       additionalProperties: false,
@@ -369,11 +390,13 @@ function memoryListTool(store) {
       render: (_args, value) => renderText(value),
     },
     execute: async (args) => {
+      const projectId = args.projectId ? String(args.projectId) : defaultProjectId;
       const events = await store.list({
         ...(args.kind ? { kind: args.kind } : {}),
         ...(args.includeInactive
           ? { lifecycles: ["active", "decayed", "archived", "soft_deleted"] }
           : {}),
+        ...(projectId ? { projectId } : {}),
         ...(args.limit ? { limit: Number(args.limit) } : {}),
       });
       return {
@@ -623,6 +646,34 @@ function experienceListTool(store, defaultProjectId = null) {
         ...(args.limit ? { limit: Number(args.limit) } : {}),
       });
       return { items: events.map((event) => experienceView(event, 0)) };
+    },
+  };
+}
+
+function experienceExportTool(store) {
+  return {
+    name: "experience_export",
+    description: "Export the complete experience history as JSONL.",
+    parameters: {
+      type: "object",
+      properties: { limit: { type: "number" } },
+      additionalProperties: false,
+    },
+    output: {
+      schema: objectSchema(
+        { lines: { type: "number" }, jsonl: { type: "string" } },
+        ["lines", "jsonl"],
+      ),
+      render: (_args, value) => renderText(value),
+    },
+    execute: async (args) => {
+      const limit = Math.min(Math.max(Number(args.limit ?? 200), 1), 1000);
+      const lines = [];
+      for await (const line of store.exportJsonl()) {
+        lines.push(line.trim());
+        if (lines.length >= limit) break;
+      }
+      return { lines: lines.length, jsonl: lines.join("\n") };
     },
   };
 }

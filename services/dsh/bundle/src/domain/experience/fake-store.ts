@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { computeConfidence } from "./confidence.ts";
-import { isExperienceVisible } from "./visibility.ts";
+import { isVisible } from "../scope.ts";
 import type {
   ExperienceDraft,
   ExperienceEvent,
@@ -102,7 +102,7 @@ export class FakeExperienceStore implements ExperienceStore {
     const hits: ExperienceHit[] = [];
     for (const event of this.#heads()) {
       if (!query.includeDeprecated && event.lifecycle !== "active") continue;
-      if (!isExperienceVisible(event, query.projectId ?? null)) continue;
+      if (!isVisible(event, query.projectId ?? null)) continue;
       if (!tags.every((tag) => event.tags.includes(tag))) continue;
       const haystack = `${event.situation}\n${event.lesson}\n${event.tags.join(" ")}`.toLowerCase();
       const matchScore = looseMatchScore(haystack, needle);
@@ -124,7 +124,7 @@ export class FakeExperienceStore implements ExperienceStore {
     const limit = query.limit ?? 50;
     return this.#heads()
       .filter((event) => lifecycles.includes(event.lifecycle))
-      .filter((event) => isExperienceVisible(event, query.projectId ?? null))
+      .filter((event) => isVisible(event, query.projectId ?? null))
       .filter((event) => tags.every((tag) => event.tags.includes(tag)))
       .sort((left, right) => right.eventTime - left.eventTime)
       .slice(0, limit)
@@ -184,6 +184,12 @@ export class FakeExperienceStore implements ExperienceStore {
   }
 
   async close(): Promise<void> {}
+
+  async *exportJsonl(): AsyncIterable<string> {
+    for (const event of this.#events) {
+      yield `${JSON.stringify(this.#view(event))}\n`;
+    }
+  }
 
   #view(event: StoredExperience): ExperienceEvent {
     const counts = this.#feedback.get(event.experienceId) ?? { success: 0, failure: 0 };

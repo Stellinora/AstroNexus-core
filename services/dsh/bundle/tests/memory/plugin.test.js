@@ -126,6 +126,7 @@ test("memory plugin registers knowledge and experience tools", async () => {
     const expSearch = ctx.tools.defs.get("experience_search");
     const expFeedback = ctx.tools.defs.get("experience_feedback");
     const expList = ctx.tools.defs.get("experience_list");
+    const expExport = ctx.tools.defs.get("experience_export");
     for (const tool of [
       remember,
       search,
@@ -138,6 +139,7 @@ test("memory plugin registers knowledge and experience tools", async () => {
       expSearch,
       expFeedback,
       expList,
+      expExport,
     ]) {
       assert.equal(typeof tool?.execute, "function");
     }
@@ -189,6 +191,10 @@ test("memory plugin registers knowledge and experience tools", async () => {
 
     const expListed = await expList.execute({}, exec);
     assert.equal(expListed.items.length, 1);
+
+    const expExported = await expExport.execute({}, exec);
+    assert.equal(expExported.lines, 1);
+    assert.match(expExported.jsonl, /部署后端口冲突/);
   } finally {
     ctx.dispose();
     rmSync(dir, { recursive: true, force: true });

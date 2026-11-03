@@ -21,6 +21,7 @@ import type {
   RetrievalHit,
 } from "./contracts.ts";
 import { planMaintenance } from "./maintenance.ts";
+import { isVisible } from "../scope.ts";
 
 export interface FakeStoreOptions {
   readonly now?: () => number;
@@ -50,6 +51,8 @@ export class FakeMemoryStore implements MemoryStore {
       searchText: input.searchText ?? JSON.stringify(input.payload),
       eventTime: input.eventTime ?? this.#now(),
       lifecycle: "active",
+      projectId: input.projectId ?? null,
+      visibility: input.visibility ?? "private",
       sourceRef: input.sourceRef ?? null,
       externalId: input.externalId ?? null,
     });
@@ -67,6 +70,8 @@ export class FakeMemoryStore implements MemoryStore {
       searchText: input.searchText ?? current.searchText,
       eventTime: this.#now(),
       lifecycle: "active",
+      projectId: input.projectId !== undefined ? input.projectId : current.projectId,
+      visibility: input.visibility ?? current.visibility,
       sourceRef: input.sourceRef ?? current.sourceRef,
       externalId: input.externalId ?? null,
     });
@@ -85,6 +90,8 @@ export class FakeMemoryStore implements MemoryStore {
       searchText: current.searchText,
       eventTime: this.#now(),
       lifecycle: to,
+      projectId: current.projectId,
+      visibility: current.visibility,
       sourceRef: current.sourceRef,
       externalId: null,
     });
@@ -96,6 +103,7 @@ export class FakeMemoryStore implements MemoryStore {
     const hits: RetrievalHit[] = [];
     for (const event of this.#heads()) {
       if (event.lifecycle !== "active") continue;
+      if (!isVisible(event, query.projectId ?? null)) continue;
       if (query.kind && event.kind !== query.kind) continue;
       if (query.sourceRefPrefix && !(event.sourceRef ?? "").startsWith(query.sourceRefPrefix)) continue;
       const haystack = event.searchText.toLowerCase();
@@ -125,6 +133,7 @@ export class FakeMemoryStore implements MemoryStore {
     const limit = query.limit ?? 50;
     return this.#heads()
       .filter((event) => lifecycles.includes(event.lifecycle))
+      .filter((event) => isVisible(event, query.projectId ?? null))
       .filter((event) => (query.kind ? event.kind === query.kind : true))
       .sort((left, right) => right.eventTime - left.eventTime)
       .slice(0, limit);
