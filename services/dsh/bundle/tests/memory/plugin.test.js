@@ -275,6 +275,53 @@ test("memory plugin skips short and slash-command messages", async () => {
   }
 });
 
+test("memory plugin can re-inject experience after configured turns", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "astronexus-memory-reinject-"));
+  const ctx = createContext();
+  try {
+    apply(ctx, {
+      dbPath: join(dir, "memory.db"),
+      bootTokenBudget: 200,
+      experienceReinjectAfterTurns: 2,
+    });
+    const exec = { signal: new AbortController().signal };
+    await ctx.tools.defs.get("experience_remember").execute(
+      {
+        situation: "部署后端口冲突",
+        lesson: "部署前先确认旧实例已停止",
+        baseConfidence: 0.8,
+      },
+      exec,
+    );
+
+    const preStep = ctx.listeners.get("agent/pre-step");
+    const agent = { id: "agent-r" };
+    const messages = [userMessage([{ type: "text", text: "部署后端口冲突了" }])];
+    const provider = experienceSpec(ctx);
+
+    await preStep(
+      { agent, messages, turn: 1, step: 1, signal: new AbortController().signal },
+      async () => ({ kind: "enter", messages }),
+    );
+    assert.match(provider.text({ agent }), /Known experience/);
+
+    await preStep(
+      { agent, messages, turn: 2, step: 1, signal: new AbortController().signal },
+      async () => ({ kind: "enter", messages }),
+    );
+    assert.equal(provider.text({ agent }), "");
+
+    await preStep(
+      { agent, messages, turn: 4, step: 1, signal: new AbortController().signal },
+      async () => ({ kind: "enter", messages }),
+    );
+    assert.match(provider.text({ agent }), /Known experience/);
+  } finally {
+    ctx.dispose();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 async function waitFor(predicate, timeoutMs = 2000) {
   const start = Date.now();
   while (!predicate()) {

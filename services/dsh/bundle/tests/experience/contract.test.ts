@@ -124,6 +124,34 @@ for (const storeCase of cases()) {
     }
   });
 
+  test(`${storeCase.name}: project and visibility filtering`, async () => {
+    const store = await storeCase.create();
+    try {
+      await store.remember({ situation: "global thing", lesson: "g", visibility: "global" });
+      await store.remember({
+        situation: "project only",
+        lesson: "p",
+        projectId: "p1",
+        visibility: "private",
+      });
+      await store.remember({ situation: "unscoped thing", lesson: "u" });
+
+      assert.equal(
+        (await store.search({ situation: "project only", projectId: "p1" })).length,
+        1,
+      );
+      assert.equal((await store.search({ situation: "thing", projectId: "p1" })).length, 2);
+      assert.equal((await store.search({ situation: "thing" })).length, 2);
+      assert.equal((await store.search({ situation: "thing", projectId: "p2" })).length, 2);
+      assert.equal((await store.search({ situation: "project only" })).length, 0);
+
+      assert.equal((await store.list({ projectId: "p1" })).length, 3);
+      assert.equal((await store.list()).length, 2);
+    } finally {
+      await store.close();
+    }
+  });
+
   test(`${storeCase.name}: maintenance deprecates low-confidence experience`, async () => {    const store = await storeCase.create();
     try {
       const { experience } = await store.remember({

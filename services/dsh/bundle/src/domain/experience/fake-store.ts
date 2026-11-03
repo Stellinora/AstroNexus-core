@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { computeConfidence } from "./confidence.ts";
+import { isExperienceVisible } from "./visibility.ts";
 import type {
   ExperienceDraft,
   ExperienceEvent,
@@ -101,7 +102,7 @@ export class FakeExperienceStore implements ExperienceStore {
     const hits: ExperienceHit[] = [];
     for (const event of this.#heads()) {
       if (!query.includeDeprecated && event.lifecycle !== "active") continue;
-      if (query.projectId && event.projectId !== query.projectId) continue;
+      if (!isExperienceVisible(event, query.projectId ?? null)) continue;
       if (!tags.every((tag) => event.tags.includes(tag))) continue;
       const haystack = `${event.situation}\n${event.lesson}\n${event.tags.join(" ")}`.toLowerCase();
       const matchScore = looseMatchScore(haystack, needle);
@@ -123,7 +124,7 @@ export class FakeExperienceStore implements ExperienceStore {
     const limit = query.limit ?? 50;
     return this.#heads()
       .filter((event) => lifecycles.includes(event.lifecycle))
-      .filter((event) => (query.projectId ? event.projectId === query.projectId : true))
+      .filter((event) => isExperienceVisible(event, query.projectId ?? null))
       .filter((event) => tags.every((tag) => event.tags.includes(tag)))
       .sort((left, right) => right.eventTime - left.eventTime)
       .slice(0, limit)

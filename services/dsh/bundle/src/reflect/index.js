@@ -65,6 +65,7 @@ export function apply(ctx, config = {}) {
     ...(config.maxInputChars ? { maxInputChars: config.maxInputChars } : {}),
     ...(config.maxOutputTokens ? { maxOutputTokens: config.maxOutputTokens } : {}),
     ...(config.projectId ? { projectId: config.projectId } : {}),
+    ...(config.visibility ? { visibility: config.visibility } : {}),
     ...(debug ? { debug } : {}),
   };
 
@@ -195,6 +196,7 @@ export async function reflectOnce(ctx, stores, options = {}) {
       conditions: item.conditions,
       tags: item.tags,
       projectId: options.projectId ?? null,
+      visibility: options.visibility ?? (options.projectId ? "project" : "private"),
       sourceRefs: episodeIds.map((id) => `episode:${id}`),
     });
     experienceWritten += 1;

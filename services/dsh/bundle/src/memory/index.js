@@ -23,6 +23,13 @@ export function apply(ctx, config = {}) {
   const experienceMaxItems = config.experienceMaxItems ?? 2;
   const experienceMaxChars = config.experienceMaxChars ?? 400;
   const experienceMinConfidence = config.experienceMinConfidence ?? 0.3;
+  const experienceProjectId = config.projectId ?? null;
+  const experienceVisibility =
+    config.experienceVisibility ?? (experienceProjectId ? "project" : "private");
+  const experienceReinjectAfterTurns = Math.max(
+    0,
+    Number(config.experienceReinjectAfterTurns ?? 0),
+  );
 
   const store = new SqliteMemoryStore(dbPath);
   const experience = new SqliteExperienceStore(dbPath);
@@ -58,16 +65,36 @@ export function apply(ctx, config = {}) {
         const state = injectedExperience.get(agentId);
         if (state && state.turn === situation.turn) return state.text;
 
-        const hits = experience.searchSync({ situation: situation.text, limit: 10 });
+        const exclude = new Set();
+        if (state) {
+          for (const [experienceId, lastTurn] of state.lastTurns) {
+            if (
+              experienceReinjectAfterTurns <= 0 ||
+              situation.turn - lastTurn < experienceReinjectAfterTurns
+            ) {
+              exclude.add(experienceId);
+            }
+          }
+        }
+
+        const hits = experience.searchSync({
+          situation: situation.text,
+          limit: 10,
+          ...(experienceProjectId ? { projectId: experienceProjectId } : {}),
+        });
         const selected = selectExperienceForInjection(hits, {
           maxItems: experienceMaxItems,
           maxChars: experienceMaxChars,
           minConfidence: experienceMinConfidence,
-          excludeIds: state ? state.ids : new Set(),
+          excludeIds: exclude,
         });
-        const ids = new Set(state ? state.ids : []);
-        for (const item of selected.items) ids.add(item.experienceId);
-        injectedExperience.set(agentId, { turn: situation.turn, text: selected.text, ids });
+        const lastTurns = new Map(state ? state.lastTurns : []);
+        for (const item of selected.items) lastTurns.set(item.experienceId, situation.turn);
+        injectedExperience.set(agentId, {
+          turn: situation.turn,
+          text: selected.text,
+          lastTurns,
+        });
         return selected.text;
       },
       required: true,
@@ -111,10 +138,17 @@ export function apply(ctx, config = {}) {
   ctx.effect(() => ctx.tools.register(memoryForgetTool(store, refresh)));
   ctx.effect(() => ctx.tools.register(memoryExportTool(store)));
   ctx.effect(() => ctx.tools.register(memoryStatsTool(store)));
-  ctx.effect(() => ctx.tools.register(experienceSearchTool(experience)));
-  ctx.effect(() => ctx.tools.register(experienceRememberTool(experience)));
+  ctx.effect(() => ctx.tools.register(experienceSearchTool(experience, experienceProjectId)));
+  ctx.effect(() =>
+    ctx.tools.register(
+      experienceRememberTool(experience, {
+        projectId: experienceProjectId,
+        visibility: experienceVisibility,
+      }),
+    ),
+  );
   ctx.effect(() => ctx.tools.register(experienceFeedbackTool(experience)));
-  ctx.effect(() => ctx.tools.register(experienceListTool(experience)));
+  ctx.effect(() => ctx.tools.register(experienceListTool(experience, experienceProjectId)));
 
   ctx.effect(() => () => {
     store.close().catch(() => {});
@@ -438,7 +472,7 @@ function memoryStatsTool(store) {
   };
 }
 
-function experienceSearchTool(store) {
+function experienceSearchTool(store, defaultProjectId = null) {
   return {
     name: "experience_search",
     description:
@@ -448,6 +482,7 @@ function experienceSearchTool(store) {
       properties: {
         situation: { type: "string", description: "Current situation or problem." },
         tags: { type: "array", items: { type: "string" } },
+        projectId: { type: "string", description: "Project scope; defaults to the deployment project." },
         includeDeprecated: { type: "boolean" },
         limit: { type: "number" },
       },
@@ -459,9 +494,11 @@ function experienceSearchTool(store) {
       render: (_args, value) => renderText(value),
     },
     execute: async (args) => {
+      const projectId = args.projectId ? String(args.projectId) : defaultProjectId;
       const hits = await store.search({
         situation: String(args.situation ?? ""),
         ...(Array.isArray(args.tags) ? { tags: args.tags.map(String) } : {}),
+        ...(projectId ? { projectId } : {}),
         ...(args.includeDeprecated ? { includeDeprecated: true } : {}),
         ...(args.limit ? { limit: Number(args.limit) } : {}),
       });
@@ -470,7 +507,7 @@ function experienceSearchTool(store) {
   };
 }
 
-function experienceRememberTool(store) {
+function experienceRememberTool(store, defaults = {}) {
   return {
     name: "experience_remember",
     description:
@@ -486,6 +523,8 @@ function experienceRememberTool(store) {
         conditions: { type: "array", items: { type: "string" } },
         tags: { type: "array", items: { type: "string" } },
         baseConfidence: { type: "number" },
+        projectId: { type: "string", description: "Project scope; defaults to the deployment project." },
+        visibility: { type: "string", enum: ["private", "project", "global"] },
       },
       required: ["situation", "lesson"],
       additionalProperties: false,
@@ -498,6 +537,8 @@ function experienceRememberTool(store) {
       render: (_args, value) => renderText(value),
     },
     execute: async (args) => {
+      const projectId = args.projectId ? String(args.projectId) : (defaults.projectId ?? null);
+      const visibility = args.visibility ?? defaults.visibility ?? "private";
       const result = await store.remember({
         situation: String(args.situation ?? ""),
         lesson: String(args.lesson ?? ""),
@@ -507,6 +548,8 @@ function experienceRememberTool(store) {
         ...(Array.isArray(args.conditions) ? { conditions: args.conditions.map(String) } : {}),
         ...(Array.isArray(args.tags) ? { tags: args.tags.map(String) } : {}),
         ...(typeof args.baseConfidence === "number" ? { baseConfidence: args.baseConfidence } : {}),
+        projectId,
+        visibility,
       });
       return {
         experienceId: result.experience.experienceId,
@@ -553,7 +596,7 @@ function experienceFeedbackTool(store) {
   };
 }
 
-function experienceListTool(store) {
+function experienceListTool(store, defaultProjectId = null) {
   return {
     name: "experience_list",
     description: "List experience entries, optionally by lifecycle and tags.",
@@ -562,6 +605,7 @@ function experienceListTool(store) {
       properties: {
         lifecycle: { type: "array", items: { type: "string", enum: EXPERIENCE_LIFECYCLES } },
         tags: { type: "array", items: { type: "string" } },
+        projectId: { type: "string", description: "Project scope; defaults to the deployment project." },
         limit: { type: "number" },
       },
       additionalProperties: false,
@@ -571,9 +615,11 @@ function experienceListTool(store) {
       render: (_args, value) => renderText(value),
     },
     execute: async (args) => {
+      const projectId = args.projectId ? String(args.projectId) : defaultProjectId;
       const events = await store.list({
         ...(Array.isArray(args.lifecycle) ? { lifecycle: args.lifecycle.map(String) } : {}),
         ...(Array.isArray(args.tags) ? { tags: args.tags.map(String) } : {}),
+        ...(projectId ? { projectId } : {}),
         ...(args.limit ? { limit: Number(args.limit) } : {}),
       });
       return { items: events.map((event) => experienceView(event, 0)) };

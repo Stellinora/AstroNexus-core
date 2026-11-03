@@ -4,6 +4,7 @@ import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 import { computeConfidence } from "./confidence.ts";
+import { isExperienceVisible } from "./visibility.ts";
 import type {
   ExperienceDraft,
   ExperienceEvent,
@@ -136,7 +137,7 @@ export class SqliteExperienceStore implements ExperienceStore {
     const hits: ExperienceHit[] = [];
     for (const row of rows) {
       const event = this.#view(row);
-      if (query.projectId && event.projectId !== query.projectId) continue;
+      if (!isExperienceVisible(event, query.projectId ?? null)) continue;
       if (!tags.every((tag) => event.tags.includes(tag))) continue;
       const tagScore = tags.length === 0 ? 0 : tags.length / Math.max(1, event.tags.length);
       hits.push({
@@ -165,7 +166,7 @@ export class SqliteExperienceStore implements ExperienceStore {
       .all(...lifecycles) as unknown as ExperienceRow[];
     return rows
       .map((row) => this.#view(row))
-      .filter((event) => (query.projectId ? event.projectId === query.projectId : true))
+      .filter((event) => isExperienceVisible(event, query.projectId ?? null))
       .filter((event) => tags.every((tag) => event.tags.includes(tag)))
       .slice(0, limit);
   }
