@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { SqliteMemoryStore } from "../domain/memory/sqlite-store.ts";
 
 export const name = "astronexus-reflect";
-export const inject = ["agentDefaultModel"];
+export const inject = ["agentDefaultModel", "llm"];
 
 const HOUR_MS = 60 * 60 * 1000;
 const KINDS = new Set(["fact", "preference", "decision", "workflow", "blocker"]);
@@ -34,6 +34,7 @@ export function apply(ctx, config = {}) {
     ...(config.batchSize ? { batchSize: config.batchSize } : {}),
     ...(config.maxInputChars ? { maxInputChars: config.maxInputChars } : {}),
     ...(config.maxOutputTokens ? { maxOutputTokens: config.maxOutputTokens } : {}),
+    ...(debug ? { debug } : {}),
   };
 
   const store = new SqliteMemoryStore(dbPath);
@@ -110,7 +111,10 @@ export async function reflectOnce(ctx, store, options = {}) {
         output += chunk.text;
       }
     }
-  } catch {
+  } catch (error) {
+    if (options.debug) {
+      console.error("[astronexus-reflect] llm error", error && error.message ? error.message : error);
+    }
     return { scanned: events.length, extracted: 0, skipped: "llm-error" };
   }
 
