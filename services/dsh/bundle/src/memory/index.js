@@ -35,7 +35,9 @@ export function apply(ctx, config = {}) {
     ctx.on("session/event", (session, event) => {
       try {
         if (event.type !== "user/message" && event.type !== "assistant/message") return;
-        const text = extractText(event.data && event.data.message)
+        const message =
+          event.type === "user/message" ? event.data : event.data && event.data.message;
+        const text = extractText(message)
           .replace(/\s+/g, " ")
           .trim()
           .slice(0, maxMessageChars);

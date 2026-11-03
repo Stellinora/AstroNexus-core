@@ -40,8 +40,12 @@ function createContext() {
   return ctx;
 }
 
-function message(content) {
+function assistantMessage(content) {
   return { message: { content } };
+}
+
+function userMessage(content) {
+  return { content };
 }
 
 test("memory plugin ingests text messages and refreshes boot context", async () => {
@@ -54,20 +58,28 @@ test("memory plugin ingests text messages and refreshes boot context", async () 
 
     listener(
       { id: "session-a", seq: 1 },
-      { type: "user/message", seq: 1, data: message([{ type: "text", text: "记住：端口是 3080" }]) },
+      {
+        type: "user/message",
+        seq: 1,
+        data: userMessage([{ type: "text", text: "记住：端口是 3080" }]),
+      },
     );
     await waitFor(() => ctx.systemPrompt.spec.text().includes("3080"));
 
     listener(
       { id: "session-a", seq: 1 },
-      { type: "user/message", seq: 1, data: message([{ type: "text", text: "记住：端口是 3080" }]) },
+      {
+        type: "user/message",
+        seq: 1,
+        data: userMessage([{ type: "text", text: "记住：端口是 3080" }]),
+      },
     );
     listener(
       { id: "session-a", seq: 2 },
       {
         type: "assistant/message",
         seq: 2,
-        data: message([{ type: "text", text: "已记录这条信息，稍后确认" }]),
+        data: assistantMessage([{ type: "text", text: "已记录这条信息，稍后确认" }]),
       },
     );
     await waitFor(() => ctx.systemPrompt.spec.text().includes("已记录这条信息"));
@@ -153,11 +165,15 @@ test("memory plugin skips short and slash-command messages", async () => {
 
     listener(
       { id: "session-b", seq: 1 },
-      { type: "user/message", seq: 1, data: message([{ type: "text", text: "hi" }]) },
+      { type: "user/message", seq: 1, data: userMessage([{ type: "text", text: "hi" }]) },
     );
     listener(
       { id: "session-b", seq: 2 },
-      { type: "user/message", seq: 2, data: message([{ type: "text", text: "/help me please" }]) },
+      {
+        type: "user/message",
+        seq: 2,
+        data: userMessage([{ type: "text", text: "/help me please" }]),
+      },
     );
 
     await new Promise((resolve) => setTimeout(resolve, 100));

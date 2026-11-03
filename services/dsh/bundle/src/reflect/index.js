@@ -52,7 +52,7 @@ export function apply(ctx, config = {}) {
 
   const prime = setTimeout(() => {
     void tick();
-  }, 5000);
+  }, config.primeDelayMs ?? 5000);
   if (typeof prime.unref === "function") prime.unref();
 
   const timer = setInterval(() => {
