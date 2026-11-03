@@ -85,6 +85,64 @@ test("reflectOnce leaves the cursor when the model call fails", async () => {
   }
 });
 
+test("reflectOnce skips items that already exist as active memories", async () => {
+  const store = new SqliteMemoryStore(":memory:");
+  try {
+    await store.ingest({
+      kind: "preference",
+      payload: { text: "用户偏好深色模式" },
+      searchText: "用户偏好深色模式",
+      sourceRef: "session-c:1",
+    });
+    await store.ingest({
+      kind: "fact",
+      payload: { text: "部署环境是云端" },
+      searchText: "部署环境是云端",
+      sourceRef: "session-c:2",
+    });
+
+    const ctx = fakeContext([
+      {
+        type: "text-delta",
+        index: 0,
+        text: '[{"kind":"preference","text":"用户偏好深色模式"},{"kind":"fact","text":"部署端口是 3080"}]',
+      },
+      { type: "finish", reason: "stop" },
+    ]);
+
+    const result = await reflectOnce(ctx, store);
+    assert.equal(result.extracted, 1);
+    assert.equal((await store.retrieve({ text: "深色模式" })).length, 1);
+    assert.equal((await store.retrieve({ text: "3080" })).length, 1);
+  } finally {
+    await store.close();
+  }
+});
+
+test("recentUnreflected ignores earlier reflection outputs", async () => {
+  const store = new SqliteMemoryStore(":memory:");
+  try {
+    await store.ingest({
+      kind: "fact",
+      payload: { text: "真实来源" },
+      searchText: "真实来源",
+      sourceRef: "session-d:1",
+    });
+    await store.ingest({
+      kind: "preference",
+      payload: { text: "反思产物" },
+      searchText: "反思产物",
+      sourceRef: "reflection:1",
+    });
+
+    const events = await store.recentUnreflected();
+    assert.equal(events.length, 1);
+    assert.equal(events[0]?.sourceRef, "session-d:1");
+  } finally {
+    await store.close();
+  }
+});
+
 test("parseReflectionItems tolerates fences and invalid entries", () => {
   const items = parseReflectionItems(
     '```json\n[{"kind":"fact","text":" a "},{"kind":"nope","text":"x"},{"kind":"fact","text":""}]\n```',

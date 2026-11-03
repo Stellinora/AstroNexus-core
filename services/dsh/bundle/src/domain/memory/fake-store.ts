@@ -142,6 +142,7 @@ export class FakeMemoryStore implements MemoryStore {
     return this.#events
       .filter((event) => !this.#reflected.has(event.eventId))
       .filter((event) => event.sourceRef !== null)
+      .filter((event) => !(event.sourceRef ?? "").startsWith("reflection:"))
       .filter((event) => event.kind === "fact" || event.kind === "reflection")
       .slice(0, limit);
   }

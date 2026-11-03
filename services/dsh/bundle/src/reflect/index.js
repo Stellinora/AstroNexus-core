@@ -1,6 +1,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 
+import { normalizeMemoryText } from "../domain/memory/maintenance.ts";
 import { SqliteMemoryStore } from "../domain/memory/sqlite-store.ts";
 
 export const name = "astronexus-reflect";
@@ -120,16 +121,25 @@ export async function reflectOnce(ctx, store, options = {}) {
 
   const items = parseReflectionItems(output);
   const sourceIds = events.map((event) => event.eventId);
+  const existing = await store.list({ limit: 500 });
+  const seen = new Set(
+    existing.map((event) => `${event.kind}:${normalizeMemoryText(event.searchText)}`),
+  );
+  let extracted = 0;
   for (const item of items) {
+    const key = `${item.kind}:${normalizeMemoryText(item.text)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
     await store.ingest({
       kind: item.kind,
       payload: { text: item.text },
       searchText: item.text,
       sourceRef: `reflection:${sourceIds.join(",")}`,
     });
+    extracted += 1;
   }
   await store.markReflected(sourceIds);
-  return { scanned: events.length, extracted: items.length };
+  return { scanned: events.length, extracted };
 }
 
 export function parseReflectionItems(text) {

@@ -213,6 +213,7 @@ export class SqliteMemoryStore implements MemoryStore {
       .prepare(
         `SELECT e.* FROM memory_event e
          WHERE e.source_ref IS NOT NULL
+           AND e.source_ref NOT LIKE 'reflection:%'
            AND e.kind IN ('fact', 'reflection')
            AND NOT EXISTS (SELECT 1 FROM memory_reflection r WHERE r.event_id = e.id)
          ORDER BY e.id ASC
