@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { buildBootSnapshot } from "./boot.ts";
+import { emptyKindCounts, emptyLifecycleCounts } from "./counts.ts";
 import type {
   BootRequest,
   BootSnapshot,
@@ -12,7 +13,9 @@ import type {
   MaintenanceOptions,
   MaintenanceResult,
   MemoryEvent,
+  MemoryKind,
   MemoryLifecycle,
+  MemoryStats,
   MemoryStore,
   RetrieveQuery,
   RetrievalHit,
@@ -25,6 +28,7 @@ export interface FakeStoreOptions {
 
 export class FakeMemoryStore implements MemoryStore {
   readonly #events: MemoryEvent[] = [];
+  readonly #access = new Map<string, { count: number; last: number }>();
   readonly #now: () => number;
   #nextId = 1;
 
@@ -99,11 +103,16 @@ export class FakeMemoryStore implements MemoryStore {
       hits.push({ event, score });
     }
     hits.sort((left, right) => right.score - left.score || right.event.eventTime - left.event.eventTime);
-    return hits.slice(0, limit);
+    const result = hits.slice(0, limit);
+    for (const hit of result) this.#recordAccess(hit.event.memoryId);
+    return result;
   }
 
   boot(request: BootRequest = {}): BootSnapshot {
-    return buildBootSnapshot(this.#heads(), request);
+    const counts = new Map(
+      [...this.#access].map(([memoryId, value]) => [memoryId, value.count] as const),
+    );
+    return buildBootSnapshot(this.#heads(), request, counts);
   }
 
   async list(query: ListQuery = {}): Promise<readonly MemoryEvent[]> {
@@ -124,11 +133,35 @@ export class FakeMemoryStore implements MemoryStore {
     return plan.result;
   }
 
+  async stats(): Promise<MemoryStats> {
+    const heads = this.#heads();
+    const byKind = emptyKindCounts();
+    const byLifecycle = emptyLifecycleCounts();
+    for (const event of heads) {
+      byKind[event.kind] += 1;
+      byLifecycle[event.lifecycle] += 1;
+    }
+    return {
+      totalEvents: this.#events.length,
+      active: byLifecycle.active,
+      byKind,
+      byLifecycle,
+    };
+  }
+
   async *exportJsonl(): AsyncIterable<string> {
     for (const event of this.#events) yield `${JSON.stringify(event)}\n`;
   }
 
   async close(): Promise<void> {}
+
+  #recordAccess(memoryId: string): void {
+    const current = this.#access.get(memoryId);
+    this.#access.set(memoryId, {
+      count: (current?.count ?? 0) + 1,
+      last: this.#now(),
+    });
+  }
 
   #append(input: Omit<MemoryEvent, "eventId" | "ingestedAt">): MemoryEvent {
     const event: MemoryEvent = {

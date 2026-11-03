@@ -66,6 +66,7 @@ export function apply(ctx, config = {}) {
   ctx.effect(() => ctx.tools.register(memoryListTool(store)));
   ctx.effect(() => ctx.tools.register(memoryForgetTool(store, refresh)));
   ctx.effect(() => ctx.tools.register(memoryExportTool(store)));
+  ctx.effect(() => ctx.tools.register(memoryStatsTool(store)));
 
   ctx.effect(() => () => {
     store.close().catch(() => {});
@@ -348,6 +349,39 @@ function memoryExportTool(store) {
       }
       return { lines: lines.length, jsonl: lines.join("\n") };
     },
+  };
+}
+
+function memoryStatsTool(store) {
+  const countObject = (keys) => ({
+    type: "object",
+    properties: Object.fromEntries(keys.map((key) => [key, { type: "number" }])),
+    required: [...keys],
+    additionalProperties: false,
+  });
+  return {
+    name: "memory_stats",
+    description: "Show memory counts by kind and lifecycle.",
+    parameters: {
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    },
+    output: {
+      schema: {
+        type: "object",
+        properties: {
+          totalEvents: { type: "number" },
+          active: { type: "number" },
+          byKind: countObject(KINDS),
+          byLifecycle: countObject(["active", "decayed", "archived", "soft_deleted"]),
+        },
+        required: ["totalEvents", "active", "byKind", "byLifecycle"],
+        additionalProperties: false,
+      },
+      render: (_args, value) => renderText(value),
+    },
+    execute: async () => store.stats(),
   };
 }
 

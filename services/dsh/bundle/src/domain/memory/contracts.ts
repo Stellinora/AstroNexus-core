@@ -95,6 +95,7 @@ export interface MemoryStore {
   retrieve(query: RetrieveQuery): Promise<readonly RetrievalHit[]>;
   list(query?: ListQuery): Promise<readonly MemoryEvent[]>;
   maintenance(options?: MaintenanceOptions): Promise<MaintenanceResult>;
+  stats(): Promise<MemoryStats>;
   boot(request?: BootRequest): BootSnapshot;
   exportJsonl(): AsyncIterable<string>;
   close(): Promise<void>;
@@ -110,4 +111,11 @@ export interface MaintenanceResult {
   readonly archivedDuplicates: number;
   readonly decayed: number;
   readonly archived: number;
+}
+
+export interface MemoryStats {
+  readonly totalEvents: number;
+  readonly active: number;
+  readonly byKind: Readonly<Record<MemoryKind, number>>;
+  readonly byLifecycle: Readonly<Record<MemoryLifecycle, number>>;
 }

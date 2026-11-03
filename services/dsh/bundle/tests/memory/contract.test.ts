@@ -186,6 +186,48 @@ for (const storeCase of cases()) {
     }
   });
 
+  test(`${storeCase.name}: boot ranks frequently accessed memories first within a kind`, async () => {
+    const store = await storeCase.create();
+    try {
+      const alpha = await store.ingest({
+        kind: "fact",
+        payload: { text: "alpha fact" },
+        searchText: "alpha fact",
+      });
+      await store.ingest({
+        kind: "fact",
+        payload: { text: "beta fact" },
+        searchText: "beta fact",
+      });
+
+      await store.retrieve({ text: "alpha" });
+      const snapshot = store.boot({ maxItems: 2 });
+      assert.equal(snapshot.items[0]?.memoryId, alpha.event.memoryId);
+    } finally {
+      await store.close();
+    }
+  });
+
+  test(`${storeCase.name}: stats reports heads and lifecycle counts`, async () => {
+    const store = await storeCase.create();
+    try {
+      const created = await store.ingest({
+        kind: "fact",
+        payload: { text: "counted fact" },
+        searchText: "counted fact",
+      });
+      await store.transition(created.event.memoryId, "archived");
+
+      const stats = await store.stats();
+      assert.equal(stats.totalEvents, 2);
+      assert.equal(stats.active, 0);
+      assert.equal(stats.byKind.fact, 1);
+      assert.equal(stats.byLifecycle.archived, 1);
+    } finally {
+      await store.close();
+    }
+  });
+
   test(`${storeCase.name}: maintenance archives duplicate active heads`, async () => {
     const store = await storeCase.create();
     try {

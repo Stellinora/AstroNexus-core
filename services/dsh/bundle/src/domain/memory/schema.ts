@@ -24,6 +24,12 @@ CREATE INDEX IF NOT EXISTS memory_event_supersedes
 
 CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts
   USING fts5(search_text, tokenize='trigram');
+
+CREATE TABLE IF NOT EXISTS memory_access (
+  memory_id TEXT PRIMARY KEY,
+  access_count INTEGER NOT NULL DEFAULT 0,
+  last_accessed_at INTEGER NOT NULL
+);
 `;
 
 export function headClause(alias = "e"): string {

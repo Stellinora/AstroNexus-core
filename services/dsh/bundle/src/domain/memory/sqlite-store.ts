@@ -4,6 +4,7 @@ import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 import { buildBootSnapshot } from "./boot.ts";
+import { emptyKindCounts, emptyLifecycleCounts } from "./counts.ts";
 import type {
   BootRequest,
   BootSnapshot,
@@ -15,6 +16,7 @@ import type {
   MemoryEvent,
   MemoryKind,
   MemoryLifecycle,
+  MemoryStats,
   MemoryStore,
   MaintenanceOptions,
   MaintenanceResult,
@@ -139,7 +141,9 @@ export class SqliteMemoryStore implements MemoryStore {
            LIMIT ?`,
         )
         .all(...params, limit) as unknown as (EventRow & { score: number })[];
-      return rows.map((row) => ({ event: toEvent(row), score: Number(row.score) }));
+      const hits = rows.map((row) => ({ event: toEvent(row), score: Number(row.score) }));
+      for (const hit of hits) this.#recordAccess(hit.event.memoryId);
+      return hits;
     }
 
     conditions.push("e.search_text LIKE ?");
@@ -153,19 +157,26 @@ export class SqliteMemoryStore implements MemoryStore {
          LIMIT ?`,
       )
       .all(...params, limit) as unknown as EventRow[];
-    return rows.map((row) => ({ event: toEvent(row), score: 1 }));
+    const hits = rows.map((row) => ({ event: toEvent(row), score: 1 }));
+    for (const hit of hits) this.#recordAccess(hit.event.memoryId);
+    return hits;
   }
 
   boot(request: BootRequest = {}): BootSnapshot {
     const rows = this.#db
       .prepare(
-        `SELECT e.* FROM memory_event e
+        `SELECT e.*, COALESCE(a.access_count, 0) AS access_count
+         FROM memory_event e
+         LEFT JOIN memory_access a ON a.memory_id = e.memory_id
          WHERE e.lifecycle = 'active' AND ${headClause("e")}
          ORDER BY e.event_time DESC
          LIMIT 200`,
       )
-      .all() as unknown as EventRow[];
-    return buildBootSnapshot(rows.map(toEvent), request);
+      .all() as unknown as (EventRow & { access_count: number })[];
+    const counts = new Map(
+      rows.map((row) => [row.memory_id, Number(row.access_count)] as const),
+    );
+    return buildBootSnapshot(rows.map(toEvent), request, counts);
   }
 
   async list(query: ListQuery = {}): Promise<readonly MemoryEvent[]> {
@@ -204,6 +215,33 @@ export class SqliteMemoryStore implements MemoryStore {
     return plan.result;
   }
 
+  async stats(): Promise<MemoryStats> {
+    const total = this.#db
+      .prepare("SELECT COUNT(*) AS n FROM memory_event")
+      .get() as unknown as { n: number };
+    const rows = this.#db
+      .prepare(
+        `SELECT e.kind AS kind, e.lifecycle AS lifecycle, COUNT(*) AS n
+         FROM memory_event e
+         WHERE ${headClause("e")}
+         GROUP BY e.kind, e.lifecycle`,
+      )
+      .all() as unknown as { kind: string; lifecycle: string; n: number }[];
+
+    const byKind = emptyKindCounts();
+    const byLifecycle = emptyLifecycleCounts();
+    for (const row of rows) {
+      byKind[row.kind as MemoryKind] += Number(row.n);
+      byLifecycle[row.lifecycle as MemoryLifecycle] += Number(row.n);
+    }
+    return {
+      totalEvents: Number(total.n),
+      active: byLifecycle.active,
+      byKind,
+      byLifecycle,
+    };
+  }
+
   async *exportJsonl(): AsyncIterable<string> {
     const rows = this.#db
       .prepare("SELECT * FROM memory_event ORDER BY id ASC")
@@ -223,6 +261,18 @@ export class SqliteMemoryStore implements MemoryStore {
       if (!message.includes("trigram")) throw error;
       this.#db.exec(MEMORY_SCHEMA_SQL.replace(", tokenize='trigram'", ""));
     }
+  }
+
+  #recordAccess(memoryId: string): void {
+    this.#db
+      .prepare(
+        `INSERT INTO memory_access(memory_id, access_count, last_accessed_at)
+         VALUES (?, 1, ?)
+         ON CONFLICT(memory_id) DO UPDATE SET
+           access_count = access_count + 1,
+           last_accessed_at = excluded.last_accessed_at`,
+      )
+      .run(memoryId, this.#now());
   }
 
   #insert(input: {

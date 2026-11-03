@@ -31,6 +31,7 @@ export function estimateTokens(text: string): number {
 export function buildBootSnapshot(
   events: readonly MemoryEvent[],
   request: BootRequest = {},
+  accessCounts: ReadonlyMap<string, number> = new Map(),
 ): BootSnapshot {
   const budget = request.tokenBudget ?? DEFAULT_TOKEN_BUDGET;
   const maxItems = request.maxItems ?? DEFAULT_MAX_ITEMS;
@@ -42,6 +43,9 @@ export function buildBootSnapshot(
     .sort((left, right) => {
       const byKind = KIND_PRIORITY[left.kind] - KIND_PRIORITY[right.kind];
       if (byKind !== 0) return byKind;
+      const leftAccess = accessCounts.get(left.memoryId) ?? 0;
+      const rightAccess = accessCounts.get(right.memoryId) ?? 0;
+      if (leftAccess !== rightAccess) return rightAccess - leftAccess;
       return right.eventTime - left.eventTime;
     });
 

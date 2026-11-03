@@ -94,7 +94,8 @@ test("memory plugin registers search, remember, and correct tools", async () => 
     const list = ctx.tools.defs.get("memory_list");
     const forget = ctx.tools.defs.get("memory_forget");
     const exportTool = ctx.tools.defs.get("memory_export");
-    for (const tool of [remember, search, correct, list, forget, exportTool]) {
+    const statsTool = ctx.tools.defs.get("memory_stats");
+    for (const tool of [remember, search, correct, list, forget, exportTool, statsTool]) {
       assert.equal(typeof tool?.execute, "function");
     }
 
@@ -132,6 +133,11 @@ test("memory plugin registers search, remember, and correct tools", async () => 
     const exported = await exportTool.execute({}, exec);
     assert.equal(exported.lines, 3);
     assert.match(exported.jsonl, /端口是 8080/);
+
+    const stats = await statsTool.execute({}, exec);
+    assert.equal(stats.totalEvents, 3);
+    assert.equal(stats.active, 0);
+    assert.equal(stats.byLifecycle.soft_deleted, 1);
   } finally {
     ctx.dispose();
     rmSync(dir, { recursive: true, force: true });
