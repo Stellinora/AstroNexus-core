@@ -107,7 +107,9 @@ core/
 - [x] `memory` 插件：`session/event` 入库 + `systemPrompt.context` 注入
 - [x] `memory_search` / `remember` / `correct` / `list` / `forget` / `export` / `stats` 工具
 - [x] 访问频次统计 + 90 天半衰期 + boot 同 kind 内高频优先
-- [x] LLM 反思 Worker：蒸馏 fact/preference/decision/workflow/blocker（待真实 key 复验）
+- [x] LLM 反思 Worker：蒸馏 fact/preference/decision/workflow/blocker
+- [x] DSH 端到端（mock provider）：入库 → 反思 → 维护 → boot 注入均已验证
+- [ ] 真实供应商验证（当前网关模型组上游不可用）
 - [x] 自动入库过滤（短消息、`/` 命令、空白归一化）
 - [x] `astronexus-reflect`：去重、衰减、归档（纯规则）
 - [ ] LLM 反思：摘要、偏好提取、晋升
