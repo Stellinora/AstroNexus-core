@@ -1,8 +1,24 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { SqliteEpisodeStore } from "../../src/domain/episode/sqlite-store.ts";
+import { SqliteExperienceStore } from "../../src/domain/experience/sqlite-store.ts";
 import { SqliteMemoryStore } from "../../src/domain/memory/sqlite-store.ts";
-import { parseReflectionItems, reflectOnce } from "../../src/reflect/index.js";
+import { parseReflectionOutput, reflectOnce } from "../../src/reflect/index.js";
+
+const OUTPUT = JSON.stringify({
+  knowledge: [{ kind: "fact", text: "部署端口是 3080" }],
+  experience: [
+    {
+      situation: "部署后端口冲突",
+      action: "先查占用端口的进程",
+      outcome: "发现旧实例未退出",
+      lesson: "部署前先确认旧实例已停止",
+      conditions: ["部署"],
+      tags: ["ops", "port"],
+    },
+  ],
+});
 
 function fakeContext(chunks) {
   return {
@@ -13,6 +29,7 @@ function fakeContext(chunks) {
       stream(options) {
         assert.equal(options.provider, "mock");
         assert.equal(options.model, "mock-model");
+        assert.match(String(options.system), /memory distiller/);
         return (async function* () {
           for (const chunk of chunks) yield chunk;
         })();
@@ -21,52 +38,68 @@ function fakeContext(chunks) {
   };
 }
 
-test("reflectOnce distills items and advances the cursor", async () => {
-  const store = new SqliteMemoryStore(":memory:");
+function chunked(text) {
+  const pieces = [];
+  for (let index = 0; index < text.length; index += 40) {
+    pieces.push({ type: "text-delta", index: 0, text: text.slice(index, index + 40) });
+  }
+  pieces.push({ type: "finish", reason: "stop" });
+  return pieces;
+}
+
+async function createStores() {
+  const memory = new SqliteMemoryStore(":memory:");
+  const experience = new SqliteExperienceStore(":memory:");
+  const episodes = new SqliteEpisodeStore(":memory:");
+  return { memory, experience, episodes };
+}
+
+test("reflectOnce distills knowledge and experience from episodes", async () => {
+  const stores = await createStores();
   try {
-    await store.ingest({
-      kind: "fact",
-      payload: { text: "用户说端口是 3080" },
-      searchText: "用户说端口是 3080",
-      sourceRef: "session-a:1",
-    });
-    await store.ingest({
-      kind: "reflection",
-      payload: { text: "我们讨论了部署方式" },
-      searchText: "我们讨论了部署方式",
-      sourceRef: "session-a:2",
+    const episode = await stores.episodes.record({
+      sessionId: "session-a",
+      turn: 1,
+      startedAt: 1,
+      endedAt: 2,
+      transcript: [
+        { role: "user", text: "部署后端口冲突了", seq: 1 },
+        { role: "assistant", text: "先查占用端口的进程", seq: 2 },
+      ],
     });
 
-    const ctx = fakeContext([
-      { type: "text-delta", index: 0, text: '[{"kind":"preference","text":"用户偏好深色模式"}' },
-      { type: "text-delta", index: 0, text: ",{\"kind\":\"decision\",\"text\":\"用 SQLite 做主存储\"}]" },
-      { type: "finish", reason: "stop" },
-    ]);
+    const result = await reflectOnce(fakeContext(chunked(OUTPUT)), stores);
+    assert.equal(result.episodes, 1);
+    assert.equal(result.knowledge, 1);
+    assert.equal(result.experience, 1);
 
-    const first = await reflectOnce(ctx, store);
-    assert.equal(first.scanned, 2);
-    assert.equal(first.extracted, 2);
+    const knowledge = await stores.memory.retrieve({ text: "3080" });
+    assert.equal(knowledge.length, 1);
+    const experience = await stores.experience.search({ situation: "端口冲突" });
+    assert.equal(experience.length, 1);
+    assert.equal(experience[0]?.experience.tags.includes("ops"), true);
 
-    const preference = await store.retrieve({ text: "深色模式" });
-    assert.equal(preference.length, 1);
-    assert.equal(preference[0]?.event.kind, "preference");
+    assert.equal((await stores.episodes.recentUnreflected()).length, 0);
+    assert.equal(episode.episodeId > 0, true);
 
-    const second = await reflectOnce(ctx, store);
-    assert.equal(second.scanned, 0);
-    assert.equal(second.extracted, 0);
+    const second = await reflectOnce(fakeContext(chunked(OUTPUT)), stores);
+    assert.equal(second.episodes, 0);
   } finally {
-    await store.close();
+    await stores.memory.close();
+    await stores.experience.close();
+    await stores.episodes.close();
   }
 });
 
-test("reflectOnce leaves the cursor when the model call fails", async () => {
-  const store = new SqliteMemoryStore(":memory:");
+test("reflectOnce leaves episodes unreflected when the model call fails", async () => {
+  const stores = await createStores();
   try {
-    await store.ingest({
-      kind: "fact",
-      payload: { text: "需要重试的事实" },
-      searchText: "需要重试的事实",
-      sourceRef: "session-b:1",
+    await stores.episodes.record({
+      sessionId: "session-b",
+      turn: 1,
+      startedAt: 1,
+      endedAt: 2,
+      transcript: [{ role: "user", text: "需要重试", seq: 1 }],
     });
     const ctx = {
       agentDefaultModel: { currentSelection: () => ({ provider: "mock", model: "m" }) },
@@ -76,76 +109,66 @@ test("reflectOnce leaves the cursor when the model call fails", async () => {
         },
       },
     };
-
-    const result = await reflectOnce(ctx, store);
+    const result = await reflectOnce(ctx, stores);
     assert.equal(result.skipped, "llm-error");
-    assert.equal((await store.recentUnreflected()).length, 1);
+    assert.equal((await stores.episodes.recentUnreflected()).length, 1);
   } finally {
-    await store.close();
+    await stores.memory.close();
+    await stores.experience.close();
+    await stores.episodes.close();
   }
 });
 
-test("reflectOnce skips items that already exist as active memories", async () => {
-  const store = new SqliteMemoryStore(":memory:");
+test("reflectOnce dedupes existing knowledge and experience", async () => {
+  const stores = await createStores();
   try {
-    await store.ingest({
-      kind: "preference",
-      payload: { text: "用户偏好深色模式" },
-      searchText: "用户偏好深色模式",
+    await stores.memory.ingest({
+      kind: "fact",
+      payload: { text: "部署端口是 3080" },
+      searchText: "部署端口是 3080",
       sourceRef: "session-c:1",
     });
-    await store.ingest({
-      kind: "fact",
-      payload: { text: "部署环境是云端" },
-      searchText: "部署环境是云端",
-      sourceRef: "session-c:2",
+    await stores.experience.remember({
+      situation: "部署后端口冲突",
+      lesson: "部署前先确认旧实例已停止",
+    });
+    await stores.episodes.record({
+      sessionId: "session-c",
+      turn: 1,
+      startedAt: 1,
+      endedAt: 2,
+      transcript: [{ role: "user", text: "端口冲突", seq: 1 }],
     });
 
-    const ctx = fakeContext([
-      {
-        type: "text-delta",
-        index: 0,
-        text: '[{"kind":"preference","text":"用户偏好深色模式"},{"kind":"fact","text":"部署端口是 3080"}]',
-      },
-      { type: "finish", reason: "stop" },
-    ]);
-
-    const result = await reflectOnce(ctx, store);
-    assert.equal(result.extracted, 1);
-    assert.equal((await store.retrieve({ text: "深色模式" })).length, 1);
-    assert.equal((await store.retrieve({ text: "3080" })).length, 1);
+    const result = await reflectOnce(fakeContext(chunked(OUTPUT)), stores);
+    assert.equal(result.knowledge, 0);
+    assert.equal(result.experience, 0);
   } finally {
-    await store.close();
+    await stores.memory.close();
+    await stores.experience.close();
+    await stores.episodes.close();
   }
 });
 
-test("recentUnreflected ignores earlier reflection outputs", async () => {
-  const store = new SqliteMemoryStore(":memory:");
-  try {
-    await store.ingest({
-      kind: "fact",
-      payload: { text: "真实来源" },
-      searchText: "真实来源",
-      sourceRef: "session-d:1",
-    });
-    await store.ingest({
-      kind: "preference",
-      payload: { text: "反思产物" },
-      searchText: "反思产物",
-      sourceRef: "reflection:1",
-    });
-
-    const events = await store.recentUnreflected();
-    assert.equal(events.length, 1);
-    assert.equal(events[0]?.sourceRef, "session-d:1");
-  } finally {
-    await store.close();
-  }
-});
-
-test("parseReflectionItems tolerates fences and invalid entries", () => {
-  const items = parseReflectionItems(
-    '```json\n[{"kind":"fact","text":" a "},{"kind":"nope","text":"x"},{"kind":"fact","text":""}]\n```',
+test("parseReflectionOutput handles fences, legacy arrays, and invalid entries", () => {
+  const fenced = parseReflectionOutput(
+    '```json\n{"knowledge":[{"kind":"fact","text":"a"},{"kind":"nope","text":"x"}],"experience":[{"situation":"s","lesson":"l"}]}\n```',
   );
-  assert.deepEqual(items, [{ kind: "fact", text: "a" }]);
+  assert.deepEqual(fenced.knowledge, [{ kind: "fact", text: "a" }]);
+  assert.deepEqual(fenced.experience, [
+    {
+      situation: "s",
+      action: "",
+      outcome: "",
+      lesson: "l",
+      conditions: [],
+      tags: [],
+    },
+  ]);
+
+  const legacy = parseReflectionOutput('[{"kind":"preference","text":"dark mode"}]');
+  assert.deepEqual(legacy.knowledge, [{ kind: "preference", text: "dark mode" }]);
+  assert.deepEqual(legacy.experience, []);
+
+  assert.deepEqual(parseReflectionOutput("not json"), { knowledge: [], experience: [] });
 });

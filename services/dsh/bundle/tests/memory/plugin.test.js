@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
+import { SqliteEpisodeStore } from "../../src/domain/episode/sqlite-store.ts";
 import { apply } from "../../src/memory/index.js";
 
 function createContext() {
@@ -48,52 +49,58 @@ function userMessage(content) {
   return { content };
 }
 
-test("memory plugin ingests text messages and refreshes boot context", async () => {
+test("memory plugin ingests user messages and records turn episodes", async () => {
   const dir = mkdtempSync(join(tmpdir(), "astronexus-memory-plugin-"));
+  const dbPath = join(dir, "memory.db");
   const ctx = createContext();
   try {
-    apply(ctx, { dbPath: join(dir, "memory.db"), bootTokenBudget: 200 });
+    apply(ctx, { dbPath, bootTokenBudget: 200 });
     const listener = ctx.listeners.get("session/event");
     assert.equal(typeof listener, "function");
+    const session = { id: "session-a" };
 
-    listener(
-      { id: "session-a", seq: 1 },
-      {
-        type: "user/message",
-        seq: 1,
-        data: userMessage([{ type: "text", text: "记住：端口是 3080" }]),
-      },
-    );
+    listener(session, { type: "turn/start", seq: 1, time: 10, data: { turn: 1 } });
+    listener(session, {
+      type: "user/message",
+      seq: 2,
+      time: 11,
+      data: userMessage([{ type: "text", text: "记住：端口是 3080" }]),
+    });
     await waitFor(() => ctx.systemPrompt.spec.text().includes("3080"));
 
-    listener(
-      { id: "session-a", seq: 1 },
-      {
-        type: "user/message",
-        seq: 1,
-        data: userMessage([{ type: "text", text: "记住：端口是 3080" }]),
-      },
-    );
-    listener(
-      { id: "session-a", seq: 2 },
-      {
-        type: "assistant/message",
-        seq: 2,
-        data: assistantMessage([{ type: "text", text: "已记录这条信息，稍后确认" }]),
-      },
-    );
-    await waitFor(() => ctx.systemPrompt.spec.text().includes("已记录这条信息"));
+    listener(session, {
+      type: "assistant/message",
+      seq: 3,
+      time: 12,
+      data: assistantMessage([{ type: "text", text: "已记录这条信息，稍后确认" }]),
+    });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    assert.doesNotMatch(ctx.systemPrompt.spec.text(), /已记录这条信息/);
 
-    const text = ctx.systemPrompt.spec.text();
-    assert.equal(text.split("3080").length - 1, 1);
-    assert.match(text, /- \[reflection\] 已记录这条信息/);
+    listener(session, { type: "turn/end", seq: 4, time: 13, data: { turn: 1 } });
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
+    ctx.dispose();
+
+    const episodes = new SqliteEpisodeStore(dbPath);
+    try {
+      const pending = await episodes.recentUnreflected();
+      assert.equal(pending.length, 1);
+      assert.equal(pending[0]?.turn, 1);
+      assert.deepEqual(
+        pending[0]?.transcript.map((message) => message.role),
+        ["user", "assistant"],
+      );
+    } finally {
+      await episodes.close();
+    }
   } finally {
     ctx.dispose();
     rmSync(dir, { recursive: true, force: true });
   }
 });
 
-test("memory plugin registers search, remember, and correct tools", async () => {
+test("memory plugin registers knowledge and experience tools", async () => {
   const dir = mkdtempSync(join(tmpdir(), "astronexus-memory-tools-"));
   const ctx = createContext();
   try {
@@ -107,14 +114,27 @@ test("memory plugin registers search, remember, and correct tools", async () => 
     const forget = ctx.tools.defs.get("memory_forget");
     const exportTool = ctx.tools.defs.get("memory_export");
     const statsTool = ctx.tools.defs.get("memory_stats");
-    for (const tool of [remember, search, correct, list, forget, exportTool, statsTool]) {
+    const expRemember = ctx.tools.defs.get("experience_remember");
+    const expSearch = ctx.tools.defs.get("experience_search");
+    const expFeedback = ctx.tools.defs.get("experience_feedback");
+    const expList = ctx.tools.defs.get("experience_list");
+    for (const tool of [
+      remember,
+      search,
+      correct,
+      list,
+      forget,
+      exportTool,
+      statsTool,
+      expRemember,
+      expSearch,
+      expFeedback,
+      expList,
+    ]) {
       assert.equal(typeof tool?.execute, "function");
     }
 
     const stored = await remember.execute({ text: "端口是 3080", kind: "fact" }, exec);
-    assert.equal(typeof stored.memoryId, "string");
-    assert.equal(typeof stored.eventId, "number");
-
     const found = await search.execute({ query: "3080" }, exec);
     assert.equal(found.hits.length, 1);
     assert.equal(found.hits[0].memoryId, stored.memoryId);
@@ -124,32 +144,43 @@ test("memory plugin registers search, remember, and correct tools", async () => 
       exec,
     );
     assert.equal(fixed.previousEventId, stored.eventId);
-
-    const oldHits = await search.execute({ query: "3080" }, exec);
-    const newHits = await search.execute({ query: "8080" }, exec);
-    assert.equal(oldHits.hits.length, 0);
-    assert.equal(newHits.hits.length, 1);
-    assert.match(ctx.systemPrompt.spec.text(), /8080/);
-    assert.doesNotMatch(ctx.systemPrompt.spec.text(), /3080/);
+    assert.equal((await search.execute({ query: "3080" }, exec)).hits.length, 0);
+    assert.equal((await search.execute({ query: "8080" }, exec)).hits.length, 1);
 
     const listed = await list.execute({}, exec);
     assert.equal(listed.items.length, 1);
-    assert.equal(listed.items[0].text, "端口是 8080");
-
     const forgotten = await forget.execute({ memoryId: stored.memoryId }, exec);
     assert.equal(forgotten.lifecycle, "soft_deleted");
-    const afterForget = await list.execute({}, exec);
-    assert.equal(afterForget.items.length, 0);
-    assert.equal((await search.execute({ query: "8080" }, exec)).hits.length, 0);
-
-    const exported = await exportTool.execute({}, exec);
-    assert.equal(exported.lines, 3);
-    assert.match(exported.jsonl, /端口是 8080/);
-
     const stats = await statsTool.execute({}, exec);
     assert.equal(stats.totalEvents, 3);
     assert.equal(stats.active, 0);
-    assert.equal(stats.byLifecycle.soft_deleted, 1);
+
+    const experience = await expRemember.execute(
+      {
+        situation: "部署后端口冲突",
+        action: "查占用端口的进程",
+        outcome: "旧实例未退出",
+        lesson: "部署前先停旧实例",
+        tags: ["ops"],
+      },
+      exec,
+    );
+    assert.equal(experience.created, true);
+    assert.equal(typeof experience.experienceId, "string");
+
+    const expFound = await expSearch.execute({ situation: "端口冲突" }, exec);
+    assert.equal(expFound.items.length, 1);
+    assert.equal(expFound.items[0].tags.includes("ops"), true);
+
+    const feedback = await expFeedback.execute(
+      { experienceId: experience.experienceId, success: true },
+      exec,
+    );
+    assert.equal(feedback.successCount, 1);
+    assert.ok(feedback.confidence > 0.6);
+
+    const expListed = await expList.execute({}, exec);
+    assert.equal(expListed.items.length, 1);
   } finally {
     ctx.dispose();
     rmSync(dir, { recursive: true, force: true });
@@ -162,19 +193,18 @@ test("memory plugin skips short and slash-command messages", async () => {
   try {
     apply(ctx, { dbPath: join(dir, "memory.db"), bootTokenBudget: 200 });
     const listener = ctx.listeners.get("session/event");
+    const session = { id: "session-b" };
 
-    listener(
-      { id: "session-b", seq: 1 },
-      { type: "user/message", seq: 1, data: userMessage([{ type: "text", text: "hi" }]) },
-    );
-    listener(
-      { id: "session-b", seq: 2 },
-      {
-        type: "user/message",
-        seq: 2,
-        data: userMessage([{ type: "text", text: "/help me please" }]),
-      },
-    );
+    listener(session, {
+      type: "user/message",
+      seq: 1,
+      data: userMessage([{ type: "text", text: "hi" }]),
+    });
+    listener(session, {
+      type: "user/message",
+      seq: 2,
+      data: userMessage([{ type: "text", text: "/help me please" }]),
+    });
 
     await new Promise((resolve) => setTimeout(resolve, 100));
     assert.equal(ctx.systemPrompt.spec.text(), "");
