@@ -37,6 +37,7 @@ export function apply(ctx, config = {}) {
         if (event.type !== "user/message" && event.type !== "assistant/message") return;
         const message =
           event.type === "user/message" ? event.data : event.data && event.data.message;
+        if (message && message.source && message.source.kind === "runtime-context") return;
         const text = extractText(message)
           .replace(/\s+/g, " ")
           .trim()

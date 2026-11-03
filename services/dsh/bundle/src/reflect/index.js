@@ -19,6 +19,10 @@ Use the user's language. Keep each text under 200 characters. At most 20 items.`
 export function apply(ctx, config = {}) {
   const home = process.env.DSH_HOME || join(homedir(), ".dsh");
   const dbPath = config.dbPath || join(home, "memory", "memory.db");
+  const debug = config.debug === true;
+  const log = (...args) => {
+    if (debug) console.error("[astronexus-reflect]", ...args);
+  };
   const intervalMs = config.intervalMs ?? HOUR_MS;
   const maintenance = {
     ...(config.decayAfterMs ? { decayAfterMs: config.decayAfterMs } : {}),
@@ -38,13 +42,16 @@ export function apply(ctx, config = {}) {
   const tick = async () => {
     if (busy) return;
     busy = true;
+    log("tick start");
     try {
       await store.maintenance(maintenance);
+      log("maintenance done");
       if (config.reflection !== false) {
-        await reflectOnce(ctx, store, reflection);
+        const result = await reflectOnce(ctx, store, reflection);
+        log("reflection", result);
       }
-    } catch {
-      // A maintenance or reflection failure must not break the host.
+    } catch (error) {
+      log("tick error", error && error.message);
     } finally {
       busy = false;
     }
@@ -73,7 +80,6 @@ export async function reflectOnce(ctx, store, options = {}) {
   const batchSize = options.batchSize ?? 30;
   const events = await store.recentUnreflected(batchSize);
   if (events.length === 0) return { scanned: 0, extracted: 0 };
-
   const selection =
     options.provider && options.model
       ? { provider: options.provider, model: options.model }
