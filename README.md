@@ -106,7 +106,8 @@ core/
 - [x] `domain/memory` 契约 + SQLite 最小闭环（ingest/retrieve/boot/correct/export）
 - [x] `memory` 插件：`session/event` 入库 + `systemPrompt.context` 注入
 - [x] `memory_search` / `remember` / `correct` / `list` / `forget` / `export` / `stats` 工具
-- [x] 访问频次统计 + boot 同 kind 内高频优先
+- [x] 访问频次统计 + 90 天半衰期 + boot 同 kind 内高频优先
+- [x] LLM 反思 Worker：蒸馏 fact/preference/decision/workflow/blocker（待真实 key 复验）
 - [x] 自动入库过滤（短消息、`/` 命令、空白归一化）
 - [x] `astronexus-reflect`：去重、衰减、归档（纯规则）
 - [ ] LLM 反思：摘要、偏好提取、晋升
