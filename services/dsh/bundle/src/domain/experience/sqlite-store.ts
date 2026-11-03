@@ -97,22 +97,32 @@ export class SqliteExperienceStore implements ExperienceStore {
   }
 
   async search(query: ExperienceSearchQuery): Promise<readonly ExperienceHit[]> {
+    return this.#search(query);
+  }
+
+  searchSync(query: ExperienceSearchQuery): readonly ExperienceHit[] {
+    return this.#search(query);
+  }
+
+  #search(query: ExperienceSearchQuery): readonly ExperienceHit[] {
     const needle = query.situation.trim();
     const tags = normalizeList(query.tags);
     const limit = query.limit ?? 10;
     const lifecycles = query.includeDeprecated ? ["active", "deprecated"] : ["active"];
     const placeholders = lifecycles.map(() => "?").join(", ");
     const params: (string | number)[] = [...lifecycles];
+    const normalized = normalizeSearchText(needle);
+    const useFts = normalized.length > 6;
     let sql: string;
 
-    if (needle.length >= 3) {
+    if (useFts) {
       sql = `SELECT e.*, ${COUNT_COLUMNS}, -bm25(experience_fts) AS fts_score
              FROM experience_event e
              JOIN experience_fts ON experience_fts.rowid = e.id
              WHERE experience_fts MATCH ?
                AND e.lifecycle IN (${placeholders})
                AND ${experienceHeadClause("e")}`;
-      params.unshift(quoteFts(needle));
+      params.unshift(buildFtsQuery(normalized));
     } else {
       sql = `SELECT e.*, ${COUNT_COLUMNS}
              FROM experience_event e
@@ -426,4 +436,17 @@ function clamp(value: number): number {
 
 function quoteFts(text: string): string {
   return `"${text.replace(/"/g, '""')}"`;
+}
+
+function normalizeSearchText(text: string): string {
+  return text.replace(/[^\p{L}\p{N}]+/gu, "");
+}
+
+function buildFtsQuery(normalized: string): string {
+  if (normalized.length <= 3) return quoteFts(normalized);
+  const tokens: string[] = [];
+  for (let index = 0; index + 3 <= normalized.length && tokens.length < 24; index += 1) {
+    tokens.push(quoteFts(normalized.slice(index, index + 3)));
+  }
+  return tokens.join(" OR ");
 }

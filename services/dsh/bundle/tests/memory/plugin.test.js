@@ -13,9 +13,9 @@ function createContext() {
   const ctx = {
     listeners,
     systemPrompt: {
-      spec: null,
+      specs: [],
       context(spec) {
-        this.spec = spec;
+        this.specs.push(spec);
         return () => {};
       },
     },
@@ -46,7 +46,15 @@ function assistantMessage(content) {
 }
 
 function userMessage(content) {
-  return { content };
+  return { role: "user", content };
+}
+
+function bootSpec(ctx) {
+  return ctx.systemPrompt.specs.find((spec) => spec.name === "astronexus-memory");
+}
+
+function experienceSpec(ctx) {
+  return ctx.systemPrompt.specs.find((spec) => spec.name === "astronexus-experience");
 }
 
 test("memory plugin ingests user messages and records turn episodes", async () => {
@@ -66,7 +74,7 @@ test("memory plugin ingests user messages and records turn episodes", async () =
       time: 11,
       data: userMessage([{ type: "text", text: "记住：端口是 3080" }]),
     });
-    await waitFor(() => ctx.systemPrompt.spec.text().includes("3080"));
+    await waitFor(() => bootSpec(ctx).text().includes("3080"));
 
     listener(session, {
       type: "assistant/message",
@@ -75,7 +83,7 @@ test("memory plugin ingests user messages and records turn episodes", async () =
       data: assistantMessage([{ type: "text", text: "已记录这条信息，稍后确认" }]),
     });
     await new Promise((resolve) => setTimeout(resolve, 100));
-    assert.doesNotMatch(ctx.systemPrompt.spec.text(), /已记录这条信息/);
+    assert.doesNotMatch(bootSpec(ctx).text(), /已记录这条信息/);
 
     listener(session, { type: "turn/end", seq: 4, time: 13, data: { turn: 1 } });
     await new Promise((resolve) => setTimeout(resolve, 150));
@@ -187,6 +195,59 @@ test("memory plugin registers knowledge and experience tools", async () => {
   }
 });
 
+test("memory plugin injects matching experience for the current turn", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "astronexus-memory-inject-"));
+  const ctx = createContext();
+  try {
+    apply(ctx, { dbPath: join(dir, "memory.db"), bootTokenBudget: 200 });
+    const exec = { signal: new AbortController().signal };
+
+    const remember = ctx.tools.defs.get("experience_remember");
+    await remember.execute(
+      {
+        situation: "部署后端口冲突",
+        action: "查占用端口的进程",
+        outcome: "旧实例未退出",
+        lesson: "部署前先确认旧实例已停止",
+        tags: ["ops"],
+        baseConfidence: 0.8,
+      },
+      exec,
+    );
+
+    const preStep = ctx.listeners.get("agent/pre-step");
+    const agent = { id: "agent-1" };
+    const messages = [userMessage([{ type: "text", text: "部署后端口冲突了，怎么处理？" }])];
+    await preStep(
+      { agent, messages, turn: 1, step: 1, signal: new AbortController().signal },
+      async () => ({ kind: "enter", messages }),
+    );
+
+    const provider = experienceSpec(ctx);
+    const first = provider.text({ agent });
+    assert.match(first, /Known experience/);
+    assert.match(first, /部署前先确认旧实例已停止/);
+    assert.equal(provider.text({ agent }), first);
+    assert.doesNotMatch(bootSpec(ctx).text(), /旧实例/);
+
+    await preStep(
+      { agent, messages, turn: 2, step: 1, signal: new AbortController().signal },
+      async () => ({ kind: "enter", messages }),
+    );
+    assert.equal(provider.text({ agent }), "");
+
+    const unrelated = [userMessage([{ type: "text", text: "今天天气怎么样" }])];
+    await preStep(
+      { agent, messages: unrelated, turn: 3, step: 1, signal: new AbortController().signal },
+      async () => ({ kind: "enter", messages: unrelated }),
+    );
+    assert.equal(provider.text({ agent }), "");
+  } finally {
+    ctx.dispose();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("memory plugin skips short and slash-command messages", async () => {
   const dir = mkdtempSync(join(tmpdir(), "astronexus-memory-filter-"));
   const ctx = createContext();
@@ -207,7 +268,7 @@ test("memory plugin skips short and slash-command messages", async () => {
     });
 
     await new Promise((resolve) => setTimeout(resolve, 100));
-    assert.equal(ctx.systemPrompt.spec.text(), "");
+    assert.equal(bootSpec(ctx).text(), "");
   } finally {
     ctx.dispose();
     rmSync(dir, { recursive: true, force: true });

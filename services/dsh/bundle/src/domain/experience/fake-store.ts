@@ -87,6 +87,14 @@ export class FakeExperienceStore implements ExperienceStore {
   }
 
   async search(query: ExperienceSearchQuery): Promise<readonly ExperienceHit[]> {
+    return this.#search(query);
+  }
+
+  searchSync(query: ExperienceSearchQuery): readonly ExperienceHit[] {
+    return this.#search(query);
+  }
+
+  #search(query: ExperienceSearchQuery): readonly ExperienceHit[] {
     const needle = query.situation.trim().toLowerCase();
     const tags = normalizeList(query.tags);
     const limit = query.limit ?? 10;
@@ -96,13 +104,13 @@ export class FakeExperienceStore implements ExperienceStore {
       if (query.projectId && event.projectId !== query.projectId) continue;
       if (!tags.every((tag) => event.tags.includes(tag))) continue;
       const haystack = `${event.situation}\n${event.lesson}\n${event.tags.join(" ")}`.toLowerCase();
-      if (needle !== "" && !haystack.includes(needle)) continue;
+      const matchScore = looseMatchScore(haystack, needle);
+      if (needle !== "" && matchScore === 0) continue;
       const view = this.#view(event);
       const tagScore = tags.length === 0 ? 0 : tags.length / Math.max(1, event.tags.length);
-      const matchScore = needle === "" ? 1 : countOccurrences(haystack, needle);
       hits.push({
         experience: view,
-        score: matchScore + tagScore + view.confidence,
+        score: (needle === "" ? 1 : matchScore) + tagScore + view.confidence,
       });
     }
     hits.sort((left, right) => right.score - left.score);
@@ -246,4 +254,19 @@ function countOccurrences(haystack: string, needle: string): number {
     index = haystack.indexOf(needle, index + needle.length);
   }
   return count;
+}
+
+function normalizeSearchText(text: string): string {
+  return text.replace(/[^\p{L}\p{N}]+/gu, "");
+}
+
+function looseMatchScore(haystack: string, needle: string): number {
+  if (haystack.includes(needle)) return countOccurrences(haystack, needle);
+  const normalized = normalizeSearchText(needle);
+  if (normalized.length <= 6) return 0;
+  let score = 0;
+  for (let index = 0; index + 3 <= normalized.length; index += 1) {
+    if (haystack.includes(normalized.slice(index, index + 3))) score += 1;
+  }
+  return score;
 }

@@ -124,8 +124,7 @@ for (const storeCase of cases()) {
     }
   });
 
-  test(`${storeCase.name}: maintenance deprecates low-confidence experience`, async () => {
-    const store = await storeCase.create();
+  test(`${storeCase.name}: maintenance deprecates low-confidence experience`, async () => {    const store = await storeCase.create();
     try {
       const { experience } = await store.remember({
         situation: "总是失败的做法",

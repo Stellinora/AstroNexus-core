@@ -2,6 +2,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 import { SqliteEpisodeStore } from "../domain/episode/sqlite-store.ts";
+import { selectExperienceForInjection } from "../domain/experience/inject.ts";
 import { SqliteExperienceStore } from "../domain/experience/sqlite-store.ts";
 import { SqliteMemoryStore } from "../domain/memory/sqlite-store.ts";
 
@@ -18,6 +19,10 @@ export function apply(ctx, config = {}) {
   const tokenBudget = config.bootTokenBudget ?? 800;
   const maxMessageChars = config.maxMessageChars ?? 4000;
   const minMessageChars = config.minMessageChars ?? 8;
+  const autoInjectExperience = config.autoInjectExperience !== false;
+  const experienceMaxItems = config.experienceMaxItems ?? 2;
+  const experienceMaxChars = config.experienceMaxChars ?? 400;
+  const experienceMinConfidence = config.experienceMinConfidence ?? 0.3;
 
   const store = new SqliteMemoryStore(dbPath);
   const experience = new SqliteExperienceStore(dbPath);
@@ -28,6 +33,8 @@ export function apply(ctx, config = {}) {
   };
 
   const buffers = new Map();
+  const situations = new Map();
+  const injectedExperience = new Map();
 
   ctx.effect(() =>
     ctx.systemPrompt.context({
@@ -35,6 +42,55 @@ export function apply(ctx, config = {}) {
       order: 1200,
       text: () => snapshot.text,
       required: true,
+    }),
+  );
+
+  ctx.effect(() =>
+    ctx.systemPrompt.context({
+      name: "astronexus-experience",
+      order: 1210,
+      text: (assembly) => {
+        if (!autoInjectExperience) return "";
+        const agentId = assembly && assembly.agent && assembly.agent.id;
+        if (!agentId) return "";
+        const situation = situations.get(agentId);
+        if (!situation) return "";
+        const state = injectedExperience.get(agentId);
+        if (state && state.turn === situation.turn) return state.text;
+
+        const hits = experience.searchSync({ situation: situation.text, limit: 10 });
+        const selected = selectExperienceForInjection(hits, {
+          maxItems: experienceMaxItems,
+          maxChars: experienceMaxChars,
+          minConfidence: experienceMinConfidence,
+          excludeIds: state ? state.ids : new Set(),
+        });
+        const ids = new Set(state ? state.ids : []);
+        for (const item of selected.items) ids.add(item.experienceId);
+        injectedExperience.set(agentId, { turn: situation.turn, text: selected.text, ids });
+        return selected.text;
+      },
+      required: true,
+    }),
+  );
+
+  ctx.effect(() =>
+    ctx.on("agent/pre-step", async (payload, next) => {
+      const decision = await next();
+      if (decision && decision.kind === "enter") {
+        const text = lastUserText(decision.messages);
+        if (text !== "") {
+          situations.set(payload.agent.id, { text, turn: payload.turn });
+        }
+      }
+      return decision;
+    }),
+  );
+
+  ctx.effect(() =>
+    ctx.on("agent/disposed", ({ agent }) => {
+      situations.delete(agent.id);
+      injectedExperience.delete(agent.id);
     }),
   );
 
@@ -589,6 +645,20 @@ function extractText(message) {
     }
   }
   return parts.join("\n").trim();
+}
+
+function lastUserText(messages) {
+  if (!Array.isArray(messages)) return "";
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (!message || message.role !== "user") continue;
+    if (message.source && message.source.kind === "runtime-context") continue;
+    const text = extractText(message)
+      .replace(/\s+/g, " ")
+      .trim();
+    if (text !== "") return text;
+  }
+  return "";
 }
 
 function objectSchema(properties, required) {
